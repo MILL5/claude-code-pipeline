@@ -53,6 +53,7 @@ REQUIRED_SKILLS = [
     "open-pr/SKILL.md",
     "summarize-implementation/SKILL.md",
     "token-analysis/SKILL.md",
+    "fix-defects/SKILL.md",
 ]
 
 ESSENTIAL_OVERLAY_MAX_CHARS = 1000
@@ -146,7 +147,8 @@ def check_required_files(result: ValidationResult) -> None:
         else:
             result.fail(f"Missing skill: {skill}")
 
-    for template in ["CLAUDE.md.template", "ORCHESTRATOR.md.template", "pipeline.config.template"]:
+    for template in ["CLAUDE.md.template", "ORCHESTRATOR.md.template",
+                      "pipeline.config.template", "defect-report.md"]:
         path = PIPELINE_ROOT / "templates" / template
         if path.exists():
             result.ok(f"Template exists: {template}")
@@ -485,6 +487,60 @@ def check_cross_references(result: ValidationResult) -> None:
             result.fail(f"Orchestrate missing reference to {cmd}")
 
 
+def check_fix_defects_skill(result: ValidationResult) -> None:
+    """Validate the fix-defects skill references required patterns."""
+    path = PIPELINE_ROOT / "skills" / "fix-defects" / "SKILL.md"
+    if not path.exists():
+        result.fail("fix-defects SKILL.md exists")
+        return
+
+    content = path.read_text()
+
+    # Must reference the defect report template
+    if "defect-report.md" in content:
+        result.ok("fix-defects references defect-report.md template")
+    else:
+        result.fail("fix-defects missing reference to defect-report.md template")
+
+    # Must reference PR comment reading via gh api
+    if "gh api" in content:
+        result.ok("fix-defects uses gh api for PR comment reading")
+    else:
+        result.fail("fix-defects missing gh api for PR comment reading")
+
+    # Must reference the defect report header marker
+    if "DEFECT REPORT" in content:
+        result.ok("fix-defects references DEFECT REPORT header marker")
+    else:
+        result.fail("fix-defects missing DEFECT REPORT header marker")
+
+    # Must define severity levels matching the template
+    for severity in ["CRITICAL", "HIGH", "MEDIUM", "LOW"]:
+        if severity in content:
+            result.ok(f"fix-defects defines severity: {severity}")
+        else:
+            result.fail(f"fix-defects missing severity: {severity}")
+
+    # Must reference agent types it launches
+    for agent in ["architect-agent", "implementer-agent", "code-reviewer-agent"]:
+        if agent in content:
+            result.ok(f"fix-defects references {agent}")
+        else:
+            result.fail(f"fix-defects missing reference to {agent}")
+
+    # Must reference token tracking
+    if "TOKEN_LEDGER" in content:
+        result.ok("fix-defects tracks TOKEN_LEDGER")
+    else:
+        result.fail("fix-defects missing TOKEN_LEDGER tracking")
+
+    # Must handle replying to PR comments
+    if "comment_id" in content.lower() or "reply" in content.lower():
+        result.ok("fix-defects replies to PR comments after fix")
+    else:
+        result.fail("fix-defects missing PR comment reply mechanism")
+
+
 def run_all_checks(verbose: bool = False) -> ValidationResult:
     result = ValidationResult()
 
@@ -505,6 +561,7 @@ def run_all_checks(verbose: bool = False) -> ValidationResult:
         ("Agent frontmatter", check_agent_frontmatter),
         ("Skill frontmatter", check_skill_frontmatter),
         ("Cross-references", check_cross_references),
+        ("Fix-defects skill", check_fix_defects_skill),
     ]
 
     for name, check_fn in checks:

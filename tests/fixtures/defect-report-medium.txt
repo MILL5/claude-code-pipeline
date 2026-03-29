@@ -1,0 +1,24 @@
+### DEFECT REPORT
+
+**Severity:** MEDIUM
+**Component:** settings page
+
+#### Steps to Reproduce
+
+1. Open Settings > Profile
+2. Change display name
+3. Click Save
+
+#### Expected Behavior
+
+A success toast notification should appear confirming the change was saved.
+
+#### Actual Behavior
+
+The change saves correctly but no toast notification appears. The user has no visual confirmation that the save succeeded.
+
+#### Screenshots
+
+#### Environment
+
+- **Browser/Device:** Firefox 121

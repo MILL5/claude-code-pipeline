@@ -220,3 +220,185 @@ def parse_open_pr_result(output: str) -> dict:
         elif line.startswith("PR_URL:"):
             result["url"] = line.split(":", 1)[1].strip()
     return result
+
+
+# --- Defect Report Parsing ---
+
+_SEVERITY_VALUES = {"CRITICAL", "HIGH", "MEDIUM", "LOW"}
+_SEVERITY_ORDER = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
+
+
+def parse_defect_report(comment_body: str) -> dict | None:
+    """Parse a single GitHub PR comment as a defect report.
+
+    Returns a dict with the parsed fields, or None if the comment does not
+    contain a valid defect report header.
+    """
+    # Must contain the defect report header
+    if "### DEFECT REPORT" not in comment_body.upper():
+        return None
+
+    lines = comment_body.split("\n")
+    report: dict = {
+        "severity": "",
+        "component": "",
+        "found_in": "",
+        "steps": [],
+        "expected": "",
+        "actual": "",
+        "screenshots": [],
+        "environment": {},
+        "additional_context": "",
+    }
+
+    section: str | None = None
+    section_lines: list[str] = []
+
+    def _flush_section() -> None:
+        """Flush accumulated section lines into the report."""
+        if not section:
+            return
+        text = "\n".join(section_lines).strip()
+        if section == "steps":
+            # Extract numbered list items
+            report["steps"] = [
+                m.group(1).strip()
+                for m in re.finditer(r"^\d+\.\s+(.+)$", text, re.MULTILINE)
+            ]
+        elif section == "expected":
+            report["expected"] = text
+        elif section == "actual":
+            report["actual"] = text
+        elif section == "screenshots":
+            report["screenshots"] = re.findall(
+                r"!\[([^\]]*)\]\(([^)]+)\)", text
+            )
+        elif section == "environment":
+            for m in re.finditer(
+                r"\*\*([^*]+?)(?::\s*)?\*\*(?::)?\s*(.+)", text
+            ):
+                report["environment"][m.group(1).strip()] = m.group(2).strip()
+        elif section == "additional_context":
+            report["additional_context"] = text
+
+    for line in lines:
+        stripped = line.strip()
+
+        # Inline fields (before sections)
+        if stripped.startswith("**Severity:**"):
+            val = stripped.split("**Severity:**", 1)[1].strip()
+            # Handle "CRITICAL | HIGH | MEDIUM | LOW" template vs actual value
+            if val in _SEVERITY_VALUES:
+                report["severity"] = val
+            elif "|" not in val:
+                # Might be a severity with extra text
+                for s in _SEVERITY_VALUES:
+                    if s in val.upper():
+                        report["severity"] = s
+                        break
+            continue
+        if stripped.startswith("**Component:**"):
+            report["component"] = stripped.split("**Component:**", 1)[1].strip()
+            continue
+        if stripped.startswith("**Found in:**"):
+            report["found_in"] = stripped.split("**Found in:**", 1)[1].strip()
+            continue
+
+        # Section headers
+        if stripped.lower().startswith("#### steps to reproduce"):
+            _flush_section()
+            section = "steps"
+            section_lines = []
+            continue
+        if stripped.lower().startswith("#### expected behavior"):
+            _flush_section()
+            section = "expected"
+            section_lines = []
+            continue
+        if stripped.lower().startswith("#### actual behavior"):
+            _flush_section()
+            section = "actual"
+            section_lines = []
+            continue
+        if stripped.lower().startswith("#### screenshots"):
+            _flush_section()
+            section = "screenshots"
+            section_lines = []
+            continue
+        if stripped.lower().startswith("#### environment"):
+            _flush_section()
+            section = "environment"
+            section_lines = []
+            continue
+        if stripped.lower().startswith("#### additional context"):
+            _flush_section()
+            section = "additional_context"
+            section_lines = []
+            continue
+        # New h4 section we don't recognize — stop current section
+        if stripped.startswith("#### "):
+            _flush_section()
+            section = None
+            section_lines = []
+            continue
+
+        if section is not None:
+            section_lines.append(line)
+
+    _flush_section()
+
+    # Validation: required fields
+    missing = []
+    if not report["severity"]:
+        missing.append("severity")
+    if not report["steps"]:
+        missing.append("steps")
+    if not report["expected"]:
+        missing.append("expected")
+    if not report["actual"]:
+        missing.append("actual")
+
+    if missing:
+        return {"error": f"missing required fields: {', '.join(missing)}", "partial": report}
+
+    return report
+
+
+def parse_defect_reports(comments: list[dict]) -> list[dict]:
+    """Parse multiple GitHub API comment objects into defect reports.
+
+    Each comment dict should have at least 'id' and 'body' keys
+    (matching the GitHub API response shape).
+
+    Returns a list of parsed defect reports sorted by severity
+    (CRITICAL first), each augmented with 'comment_id' and 'author' fields.
+    """
+    defects: list[dict] = []
+    for comment in comments:
+        body = comment.get("body", "")
+        parsed = parse_defect_report(body)
+        if parsed is None:
+            continue
+        if "error" in parsed:
+            # Include invalid reports so callers can reply with errors
+            parsed["comment_id"] = comment.get("id", "")
+            parsed["author"] = comment.get("user", {}).get("login", "")
+            defects.append(parsed)
+            continue
+        parsed["comment_id"] = comment.get("id", "")
+        parsed["author"] = comment.get("user", {}).get("login", "")
+        defects.append(parsed)
+
+    # Sort valid reports by severity (errors go to the end)
+    def _sort_key(d: dict) -> tuple:
+        if "error" in d:
+            return (99, 0)
+        return (_SEVERITY_ORDER.get(d["severity"], 99), 0)
+
+    defects.sort(key=_sort_key)
+
+    # Assign sequential IDs
+    for i, d in enumerate(defects, 1):
+        d["id"] = i
+
+    return defects

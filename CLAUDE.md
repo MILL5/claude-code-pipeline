@@ -19,6 +19,12 @@ Auto-detects stack from project files. Creates symlinks and config in the target
 /orchestrate
 ```
 
+**Fix defects from PR comments** (from within a bootstrapped project):
+```
+/fix-defects
+```
+Reads structured defect reports from GitHub PR comments (see `templates/defect-report.md` for the schema) and runs the fix pipeline for each one.
+
 **Build/test** (from within a bootstrapped project):
 ```bash
 python3 .claude/scripts/build.py [OPTIONS]
@@ -27,8 +33,8 @@ python3 .claude/scripts/test.py [OPTIONS]
 
 **Pipeline self-tests** (from the pipeline repo root):
 ```bash
-python3 tests/validate_structure.py          # Layer 1: structural integrity (147 checks)
-python3 tests/test_contracts.py              # Layer 3: output protocol contract tests (24 tests)
+python3 tests/validate_structure.py          # Layer 1: structural integrity (163 checks)
+python3 tests/test_contracts.py              # Layer 3: output protocol contract tests (34 tests)
 python3 tests/smoke/run_smoke.py             # Layer 4: bootstrap smoke test (init.sh + scripts)
 python3 tests/smoke/run_smoke.py --full      # Layer 4: full pipeline smoke test (costs ~$0.50-1.00)
 ```
@@ -44,7 +50,7 @@ User request → **1a: Analyze & Clarify** (Sonnet) → **1b: Plan** (Opus) → 
 
 1. **Agents** (`agents/`) — Four generic, stack-agnostic agent definitions: `architect-agent`, `implementer-agent`, `code-reviewer-agent`, `test-architect-agent`. Each contains an `<!-- ADAPTER:TECH_STACK_CONTEXT -->` marker where adapter overlays get injected at launch. `implementer-contract.md` is the canonical Haiku readiness checklist referenced by both the planner and implementer.
 
-2. **Skills** (`skills/`) — Eight pipeline steps. `orchestrate` is the master coordinator that invokes all others: `architect-analyzer`, `architect-planner`, `build-runner`, `test-runner`, `open-pr`, `summarize-implementation`, `token-analysis`.
+2. **Skills** (`skills/`) — Nine pipeline steps. `orchestrate` is the master coordinator that invokes all others: `architect-analyzer`, `architect-planner`, `build-runner`, `test-runner`, `open-pr`, `summarize-implementation`, `token-analysis`. The standalone `fix-defects` skill reads structured defect reports from PR comments and runs the fix pipeline independently.
 
 3. **Adapters** (`adapters/`) — Pluggable tech-stack modules (swift-ios, react, python). Each provides: `adapter.md` (metadata), four `*-overlay.md` files (injected into agents), `hooks.json` (blocks raw build/test commands), and `scripts/build.py` + `scripts/test.py` (runner scripts with strict output contracts). Each adapter also provides `implementer-overlay-essential.md` — a compact (~500-800 chars) rules-only variant used for Haiku tasks to improve signal-to-noise ratio.
 

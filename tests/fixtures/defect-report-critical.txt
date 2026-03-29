@@ -1,0 +1,36 @@
+### DEFECT REPORT
+
+**Severity:** CRITICAL
+**Component:** authentication flow
+**Found in:** src/auth/login.ts
+
+#### Steps to Reproduce
+
+1. Navigate to the login page
+2. Enter valid credentials and click "Sign In"
+3. App crashes with a white screen
+
+#### Expected Behavior
+
+User should be redirected to the dashboard after successful login.
+
+#### Actual Behavior
+
+The app crashes immediately after clicking "Sign In". The browser console shows:
+`TypeError: Cannot read properties of undefined (reading 'token')` in auth/login.ts:42.
+The crash happens 100% of the time.
+
+#### Screenshots
+
+![crash-screenshot](https://user-images.githubusercontent.com/12345/crash-white-screen.png)
+![console-error](https://user-images.githubusercontent.com/12345/console-error.png)
+
+#### Environment
+
+- **Browser/Device:** Chrome 120.0.6099.109, macOS Sequoia 15.2
+- **OS:** macOS 15.2
+- **Build:** abc1234 (feat/add-auth branch)
+
+#### Additional Context
+
+This was working before the latest batch of commits. Likely a regression from the token handling refactor.

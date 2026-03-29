@@ -41,6 +41,74 @@ The adapter config also declares:
 - **Test command**: The command agents should use to test (e.g., `python3 .claude/scripts/test.py`)
 - **Blocked commands**: Raw commands that hooks prevent (for awareness)
 
+## Step 0.5: Initialize Token Tracking
+
+Immediately after loading the adapter, initialize the `TOKEN_LEDGER` — an in-session list that
+accumulates token usage data for every agent call throughout the pipeline. Also record
+`PIPELINE_START` as the current timestamp.
+
+**Ledger entry schema** (one entry per agent call):
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `step` | string | Pipeline step ID (e.g., `1a`, `1b`, `2:1.1`, `2.1:1.1`, `3.5:fix:bug1`) |
+| `agent` | string | Agent type (`architect-agent`, `implementer-agent`, `code-reviewer-agent`, `orchestrator`) |
+| `model` | string | Model used (`haiku`, `sonnet`, `opus`) |
+| `input_chars` | number | Character count of the composed prompt sent to the agent |
+| `output_chars` | number | Character count of the agent's complete response |
+| `input_tokens` | number | `input_chars / 4` (approximate) |
+| `output_tokens` | number | `output_chars / 4` (approximate) |
+| `is_retry` | boolean | `true` if this is a review-fix cycle retry |
+| `is_escalation` | boolean | `true` if the model was escalated (e.g., haiku → sonnet for fix) |
+| `notes` | string | Context (e.g., `escalated from haiku`, `review-fix cycle 2`, `clarify round 3`) |
+| `files_read` | list | Files the agent read from disk (from TOKEN_REPORT), with approximate sizes |
+| `tool_calls` | map | Tool call counts from the agent's TOKEN_REPORT |
+| `agent_input_self` | number | Agent's self-assessed total input chars (from TOKEN_REPORT) |
+| `agent_output_self` | number | Agent's self-assessed total output chars (from TOKEN_REPORT) |
+
+**How to record:** After every Agent launch or SendMessage call:
+1. Measure the composed prompt length as `input_chars` and the agent's complete response as
+   `output_chars`. Compute approximate tokens as `chars / 4`.
+2. Parse the agent's `---TOKEN_REPORT---` block (if present) to extract `files_read`,
+   `tool_calls`, `agent_input_self`, and `agent_output_self`. These capture consumption
+   invisible to the orchestrator (file reads from disk, tool-generated output).
+3. If the TOKEN_REPORT is missing or malformed, leave those fields empty — do not fail.
+4. Append the entry to `TOKEN_LEDGER`.
+
+## Step 0.6: Prepare ORCHESTRATOR.md Extracts
+
+Read `.claude/ORCHESTRATOR.md` once at pipeline start. Instead of pasting the full file into
+every agent prompt, extract only the sections each agent needs. Parse by `##` headers and
+produce three scoped extracts:
+
+**1a Extract** (for architect-analyzer — seam analysis, fragile area scan):
+- `## Project Overview`
+- `## Targets / Entry Points`
+- `## Directory Structure`
+- `## Architecture`
+- `## Key Services / Modules`
+- `## Known Fragile Areas`
+- `## Current State`
+
+**1b Extract** (for architect-planner — decomposition, brief writing):
+- `## Architecture`
+- `## Key Services / Modules`
+- `## Data Flow`
+- `## Conventions` (all subsections)
+- `## Testing`
+- `## Anti-Patterns (Do NOT)`
+
+The 1b agent also receives the 1a-spec which already contains the project overview, directory
+structure, fragile areas, and current state — so those sections are not needed again.
+
+**3.5 Extract** (for blast-radius analysis — file correlation, fragile area check):
+- `## Directory Structure`
+- `## Key Services / Modules`
+- `## Known Fragile Areas`
+
+**Fallback:** If any expected `##` header is not found in ORCHESTRATOR.md (e.g., the file was
+customized), paste the full file instead of a partial extract.
+
 ## Pipeline Overview
 
 ```
@@ -86,6 +154,12 @@ Step 3.5: MANUAL TEST (user tests PR branch)
     |  Loop until user says "tests pass"
     v
 Step 4: FINALIZE (update .claude/ORCHESTRATOR.md, update PR, mark ready for review)
+    |
+    v
+Step 5: TOKEN ANALYSIS (mandatory, token-analysis skill)
+    |  Reads: TOKEN_LEDGER accumulated during pipeline
+    |  Analyzes: cost efficiency, model distribution, prompt bloat, escalation patterns
+    |  Files: GitHub issue on pipeline repo if significant findings exist
 ```
 
 ## Detailed Steps
@@ -116,8 +190,8 @@ Prompt: |
   USER REQUEST:
   "<user's request verbatim>"
 
-  CODEBASE CONTEXT (ORCHESTRATOR.md — already included, do not re-read from disk):
-  <paste full contents of .claude/ORCHESTRATOR.md>
+  CODEBASE CONTEXT (ORCHESTRATOR.md 1a extract — do not re-read from disk):
+  <paste 1a Extract from Step 0.6>
 ```
 
 **Clarification loop:**
@@ -128,6 +202,8 @@ Prompt: |
   - The agent outputs `CLARIFICATION COMPLETE` and writes `.claude/tmp/1a-spec.md`, or
   - The user explicitly says "proceed" or "good enough"
 - If the user says proceed before the agent signals complete, instruct the agent via SendMessage to finalize the spec with the information gathered so far.
+
+**Token tracking:** Record a `TOKEN_LEDGER` entry after the initial agent launch (step `1a`) and after each SendMessage round in the clarification loop (step `1a:clarify-N`). For each entry, measure the composed prompt as `input_chars` and the agent's response as `output_chars`. Agent: `architect-agent`, model: `sonnet`.
 
 **Recovery:** If the pipeline is interrupted after 1a and `.claude/tmp/1a-spec.md` exists, skip 1a entirely and go directly to 1b. If `.claude/tmp/1b-plan.md` also exists, skip both 1a and 1b — present the saved plan to the user for confirmation and proceed to Step 1.5.
 
@@ -151,9 +227,12 @@ Prompt: |
   ENRICHED SPEC:
   <paste full contents of .claude/tmp/1a-spec.md>
 
-  CODEBASE CONTEXT (ORCHESTRATOR.md — already included, do not re-read from disk):
-  <paste full contents of .claude/ORCHESTRATOR.md>
+  CODEBASE CONTEXT (ORCHESTRATOR.md 1b extract — do not re-read from disk):
+  <paste 1b Extract from Step 0.6>
 ```
+
+Note: The 1a-spec already contains project overview, directory structure, fragile areas, and
+current state — the 1b extract omits these to avoid duplication.
 
 **Architecture decision questions:** The 1b agent may pause once to surface implementation
 tradeoffs where both approaches are valid and the choice affects the plan structure (see
@@ -167,6 +246,8 @@ answers, the agent completes the plan.
 - Are context briefs self-contained and free of "see task X" cross-references?
 
 Present the plan summary to the user and wait for confirmation before proceeding.
+
+**Token tracking:** Record a `TOKEN_LEDGER` entry for the initial 1b agent launch (step `1b`). If architecture decision questions occur, record the SendMessage round as step `1b:decision`. If plan revisions are requested, record each revision round as step `1b:revision-N`. Agent: `architect-agent`, model: `opus`.
 
 **Plan revisions:** If the user requests changes, use **SendMessage** to the 1b agent (do NOT launch a new agent — the architect must remember its own plan). Iterate until confirmed.
 
@@ -182,6 +263,8 @@ Provide to the skill:
 
 Record `PR_BRANCH`, `PR_NUMBER`, `PR_URL` for use in later steps.
 All subsequent commits and pushes target this branch.
+
+**Token tracking:** Record a `TOKEN_LEDGER` entry for the open-pr step (step `1.5`). Agent: `orchestrator`, model: `sonnet`. Measure the skill invocation prompt and output.
 
 ### Step 2: IMPLEMENT
 
@@ -200,21 +283,33 @@ Prompt: |
   commands, coverage gate, self-review). No deviations.
 
   TECH STACK RULES:
-  <paste contents of adapter's implementer-overlay.md>
+  <select overlay by model assignment:
+    - Haiku tasks: paste adapters/<stack>/implementer-overlay-essential.md
+    - Sonnet/Opus tasks: paste adapters/<stack>/implementer-overlay.md (full)>
 
   TASK CONTEXT BRIEF:
 
   <paste the context brief from the architect's plan here>
 ```
 
+**Overlay selection rationale:** Haiku tasks receive only the essential rules (~500-800 chars)
+to maximize signal-to-noise ratio. The reviewer in Step 2.1 has the full overlay and will catch
+any violations. Sonnet/Opus tasks receive the full overlay since they handle complex tasks where
+examples and patterns are valuable.
+
 **After each implementer returns:**
 
 - If `SUCCESS`: proceed to Step 2.1 (review)
 - If `FAILURE`: report the failure details to the user. Do NOT auto-retry implementation failures — these need human judgment.
 
+**Token tracking:** Record a `TOKEN_LEDGER` entry for each implementer agent (step `2:<task_id>`, e.g., `2:1.1`). Agent: `implementer-agent`, model: as assigned by the plan.
+
 ### Step 2.1: REVIEW
 
-For each successful implementer, launch the code-reviewer to review:
+To reduce repeated context, reuse a single code-reviewer agent within each wave via
+**SendMessage** instead of launching a fresh agent per task.
+
+**First review in a wave** — launch a new code-reviewer agent:
 
 ```
 Agent: code-reviewer-agent
@@ -222,6 +317,11 @@ Model: sonnet
 Prompt: |
   You are being launched by the orchestration pipeline.
   Use your Pipeline Mode output protocol (PASS/FAIL).
+  Append a TOKEN_REPORT block after your output.
+
+  You will review multiple tasks in this wave. Each review is independent — when
+  you receive a "NEW REVIEW" message, discard all prior review context and review
+  ONLY the new changes presented.
 
   TECH STACK REVIEW RULES:
   <paste contents of adapter's reviewer-overlay.md>
@@ -231,10 +331,27 @@ Prompt: |
   <list the files the implementer created/modified>
 ```
 
-**After review returns:**
+**Subsequent reviews in the same wave** — use SendMessage to the same agent:
+
+```
+SendMessage to: <reviewer agent from first review>
+Message: |
+  NEW REVIEW — discard all prior review context. Review ONLY the following changes.
+
+  REVIEW THESE CHANGES:
+
+  <list the files the next implementer created/modified>
+```
+
+**Cap at 8 reviews per agent.** If a wave has more than 8 tasks, launch a fresh reviewer
+agent for tasks 9+. This prevents context window saturation from accumulated review output.
+
+**After each review returns:**
 
 - If `PASS`: proceed to Step 3 (commit)
 - If `FAIL`: proceed to Step 2.2 (fix)
+
+**Token tracking:** Record a `TOKEN_LEDGER` entry for each review (step `2.1:<task_id>`). Agent: `code-reviewer-agent`, model: `sonnet`. For SendMessage reviews, `input_chars` is the SendMessage content (not the full accumulated context).
 
 ### Step 2.2: FIX
 
@@ -264,6 +381,8 @@ Prompt: |
 - If `SUCCESS`: proceed to Step 3 (commit). The fix agent's self-review + build + test
   is sufficient — do NOT re-review. Skip the review-fix cycle.
 - If `FAILURE`: report to user with full context.
+
+**Token tracking:** Record a `TOKEN_LEDGER` entry for each fix (step `2.2:<task_id>`). Agent: `implementer-agent`, model: `sonnet`. Set `is_retry: true`. If the original task was assigned to haiku, also set `is_escalation: true` and note `escalated from haiku` in notes.
 
 ### Step 3: COMMIT + PUSH
 
@@ -336,8 +455,8 @@ Prompt: |
   ORIGINAL PLAN SUMMARY:
   <paste the plan overview — waves and task names, not full briefs>
 
-  CODEBASE CONTEXT (ORCHESTRATOR.md — already included, do not re-read from disk):
-  <paste full contents of .claude/ORCHESTRATOR.md>
+  CODEBASE CONTEXT (ORCHESTRATOR.md 3.5 extract — do not re-read from disk):
+  <paste 3.5 Extract from Step 0.6>
 
   Respond with:
   1. ROOT CAUSE: Which file(s) and task(s) likely caused this
@@ -405,6 +524,11 @@ Prompt: |
   <list the files the fix agent modified>
 ```
 
+**Token tracking:** Record `TOKEN_LEDGER` entries for each sub-step of the bug-fix cycle:
+- Blast-radius analysis (if triggered): step `3.5:assess:<bug_id>`, agent: `architect-agent`, model: `sonnet`
+- Bug fix: step `3.5:fix:<bug_id>`, agent: `implementer-agent`, model: `sonnet`, set `is_retry: true`
+- Bug fix review: step `3.5:review:<bug_id>`, agent: `code-reviewer-agent`, model: `sonnet`
+
 #### 3.5.4: COMMIT + PUSH
 
 Same as Step 3, but commit messages use `fix(scope):` type prefix.
@@ -447,11 +571,78 @@ After all tasks are committed and pushed:
 
 The orchestrator does NOT merge — the user decides when to merge.
 
+### Step 5: TOKEN ANALYSIS (mandatory)
+
+After finalization, analyze the token usage accumulated throughout this pipeline run. This step
+always runs — it is not skippable.
+
+#### 5.1: Compute Summary
+
+Record `PIPELINE_END` as the current timestamp. Compute `TOKEN_SUMMARY` from the `TOKEN_LEDGER`:
+
+- **Total tokens**: sum of all `input_tokens` and `output_tokens` across all ledger entries
+- **Model breakdown**: for each model (haiku, sonnet, opus) — call count, total input tokens,
+  total output tokens
+- **Step breakdown**: for each step prefix (1a, 1b, 1.5, 2, 2.1, 2.2, 3.5) — call count, total
+  input tokens, total output tokens
+- **Estimated cost**: using pricing Haiku $1/$5, Sonnet $3/$15, Opus $15/$75 per M tokens (in/out)
+- **Actual model distribution**: percentage of total token spend per model vs. the 70/20/10 target
+- **Escalation count**: entries where `is_escalation` is true
+- **Retry count**: entries where `is_retry` is true
+
+#### 5.2: Derive Pipeline Repo
+
+Resolve the pipeline repo's GitHub `owner/repo` for issue filing:
+
+```bash
+PIPELINE_REMOTE=$(git -C <pipeline_root> remote get-url origin)
+```
+
+Parse `PIPELINE_REMOTE` to extract `owner/repo`:
+- SSH format `git@github.com:owner/repo.git` → `owner/repo`
+- HTTPS format `https://github.com/owner/repo.git` → `owner/repo`
+- Strip trailing `.git` if present
+
+#### 5.3: Launch Token Analysis
+
+Read `.claude/skills/token-analysis/SKILL.md` for the skill's full instructions, then invoke it:
+
+```
+Skill: token-analysis
+Prompt: |
+  Read `.claude/skills/token-analysis/SKILL.md` for your instructions.
+
+  TOKEN LEDGER:
+  <paste the full TOKEN_LEDGER as a markdown table>
+
+  TOKEN SUMMARY:
+  <paste the computed TOKEN_SUMMARY>
+
+  PIPELINE CONTEXT:
+  - Plan file: .claude/tmp/1b-plan.md (read for planned vs actual model assignments)
+  - Pipeline repo: <owner/repo>
+  - Pipeline root: <pipeline_root>
+  - Target project stack: <stack>
+  - Pipeline duration: <PIPELINE_START> to <PIPELINE_END>
+```
+
+#### 5.4: Report Results
+
+- If the skill returns `FINDINGS: NONE`, report to the user:
+  > "Token analysis complete — no significant optimization opportunities found."
+- If the skill returns `FINDINGS: FILED` with an issue URL, report to the user:
+  > "Token analysis complete — findings filed as <issue URL>."
+- If the skill fails or `gh issue create` errors, log a warning and report to the user. Do NOT
+  consider the pipeline failed — all substantive work (implementation, review, commit, PR) is
+  already complete.
+
+---
+
 ## Parallelization Rules
 
 - **Within a wave:** launch all implementer agents simultaneously (parallel)
 - **Across waves:** sequential — wait for all agents in wave N before starting wave N+1
-- **Review agents:** can run in parallel for different implementers in the same wave
+- **Review agents:** one reviewer per wave, reused via SendMessage (sequential within wave, max 8 per agent)
 - **Fix agents:** sequential per implementer (fix, then re-review, then next cycle)
 
 ## Error Handling
@@ -468,6 +659,9 @@ The orchestrator does NOT merge — the user decides when to merge.
 | Bug fix drops test count below baseline | Reject fix, report regression to user |
 | Bug fix fails review twice | Launch architect blast-radius analysis, present to user |
 | 3+ bug-fix cycles in one manual test round | Stop, report all outstanding issues for manual triage |
+| Token analysis skill fails | Log warning, report to user, do not block pipeline completion |
+| `gh issue create` fails (missing label, auth, etc.) | Retry without `--label`, report failure if still errors |
+| Pipeline repo has no GitHub remote | Skip issue filing, report token summary to user directly |
 
 ## What the Orchestrator Does NOT Do
 

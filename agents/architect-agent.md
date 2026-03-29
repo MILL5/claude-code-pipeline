@@ -90,3 +90,28 @@ Not everything needs a full plan. If the request is:
 - A question about architecture -> answer it
 
 Use the full planning process for: new features, multi-file changes, refactors that touch >2 files, framework integrations, or anything where implementation order matters.
+
+## Token Report
+
+After your output (analysis, plan, or blast-radius assessment), append a `TOKEN_REPORT` block.
+This is used by the orchestrator for token usage analysis. Best effort — omit values you cannot
+determine.
+
+```
+---TOKEN_REPORT---
+FILES_READ:
+- <path> (~<chars> chars)
+TOOL_CALLS:
+- Read: <count>
+- Grep: <count>
+- Glob: <count>
+- EnterPlanMode: <count>
+SELF_ASSESSED_INPUT: ~<chars> chars
+SELF_ASSESSED_OUTPUT: ~<chars> chars
+---END_TOKEN_REPORT---
+```
+
+- `FILES_READ`: every file you read from disk, with approximate character count
+- `TOOL_CALLS`: count of each tool type used
+- `SELF_ASSESSED_INPUT`: approximate total characters of all input (prompt + file reads)
+- `SELF_ASSESSED_OUTPUT`: approximate total characters of all output (analysis, plan, etc.)

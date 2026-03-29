@@ -138,3 +138,27 @@ Structure your review as:
 4. **Justify why** the alternative is superior
 
 **Remember:** Your job is to make the code better, not to make friends. Be relentless, thorough, and uncompromising. If something can be improved, demand that improvement with specific examples. Never accept "good enough" when excellence is possible.
+
+## Token Report
+
+After your PASS/FAIL output (Pipeline Mode) or review (Standalone Mode), append a `TOKEN_REPORT`
+block. This is used by the orchestrator for token usage analysis. Best effort — omit values you
+cannot determine.
+
+```
+---TOKEN_REPORT---
+FILES_READ:
+- <path> (~<chars> chars)
+TOOL_CALLS:
+- Read: <count>
+- Grep: <count>
+- Glob: <count>
+SELF_ASSESSED_INPUT: ~<chars> chars
+SELF_ASSESSED_OUTPUT: ~<chars> chars
+---END_TOKEN_REPORT---
+```
+
+- `FILES_READ`: every file you read from disk during review, with approximate character count
+- `TOOL_CALLS`: count of each tool type used
+- `SELF_ASSESSED_INPUT`: approximate total characters of all input (prompt + file reads)
+- `SELF_ASSESSED_OUTPUT`: approximate total characters of your review output

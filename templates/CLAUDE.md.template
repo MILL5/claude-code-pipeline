@@ -1,0 +1,31 @@
+# Claude Code Instructions
+
+## Session Initialization
+
+Role: You are a senior {{STACK_ROLE}} developer.
+
+Context: {{PROJECT_DESCRIPTION}}
+
+Setup: At the start of each session, read `.claude/ORCHESTRATOR.md` for architecture, conventions, and current state.
+
+## Workflow Rules
+
+1. Before writing any code, describe your approach and wait for approval.
+2. If requirements are ambiguous, ask clarifying questions before writing code.
+3. After writing code, list edge cases and suggest test cases.
+4. If a task requires changes to more than 3 files, stop and break it into smaller tasks first.
+5. When there's a bug, start by writing a test that reproduces it, then fix it.
+6. Every time I correct you, reflect on what went wrong and plan to avoid repeating it.
+
+## Build & Test (Mandatory Skills)
+
+**PreToolUse hooks enforce these rules — violations are blocked automatically.**
+
+- **Builds:** Use the `build-runner` skill (or `python3 .claude/scripts/build.py` for subagents)
+- **Tests:** Use the `test-runner` skill (or `python3 .claude/scripts/test.py` for subagents)
+- **Forbidden:** {{BLOCKED_COMMANDS}} — all blocked by hook
+- **Also blocked:** `grep`, `cat`, `head`, `tail`, `find`, `sed`, `awk` via Bash — use Grep, Read, Glob, Edit tools instead
+
+{{BUILD_TARGETS}}
+
+When presenting test results: show the Summary line first, then per-target coverage, then failures table (if any). Never invent results.

@@ -1,0 +1,76 @@
+# ORCHESTRATOR.md
+
+> This file is the living architecture reference for the project. Updated at the end of each
+> orchestration session. Agents read this to understand the project structure, conventions,
+> and current state.
+
+## Project Overview
+
+**Name:** {{PROJECT_NAME}}
+**Stack:** {{STACK_NAME}}
+**Description:** {{PROJECT_DESCRIPTION}}
+
+## Targets / Entry Points
+
+| Target | Platform | Description |
+|--------|----------|-------------|
+| {{TARGET_NAME}} | {{PLATFORM}} | {{TARGET_DESCRIPTION}} |
+
+## Directory Structure
+
+```
+{{DIRECTORY_TREE}}
+```
+
+## Architecture
+
+{{ARCHITECTURE_DESCRIPTION}}
+
+## Key Services / Modules
+
+| Service | Responsibility | File(s) |
+|---------|---------------|---------|
+| | | |
+
+## Data Flow
+
+{{DATA_FLOW_DESCRIPTION}}
+
+## Conventions
+
+### Naming
+- {{NAMING_CONVENTIONS}}
+
+### Patterns
+- {{PATTERN_CONVENTIONS}}
+
+### Error Handling
+- {{ERROR_HANDLING_CONVENTIONS}}
+
+## Testing
+
+### Structure
+- Test files: {{TEST_FILE_PATTERN}}
+- Base test class: {{BASE_TEST_CLASS}} (if applicable)
+- Mock patterns: {{MOCK_PATTERN}}
+
+### Coverage Requirements
+- Minimum: 90% for new code
+- Exclusions: {{COVERAGE_EXCLUSIONS}}
+
+## Known Fragile Areas
+
+| Area | Risk | Mitigation |
+|------|------|------------|
+| | | |
+
+## Anti-Patterns (Do NOT)
+
+- {{ANTI_PATTERNS}}
+
+## Current State
+
+- **Last updated:** {{DATE}}
+- **Build status:** {{BUILD_STATUS}}
+- **Test status:** {{TEST_STATUS}}
+- **Open work:** {{OPEN_WORK}}

@@ -1,0 +1,23 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "CMD=$(jq -r '.tool_input.command'); FIRST=$(echo \"$CMD\" | head -1 | sed 's/^[[:space:]]*//' | awk '{print $1}'); case \"$FIRST\" in xcodebuild|swiftc) echo '{\"decision\":\"block\",\"reason\":\"BLOCKED: Use the build-runner or test-runner skill instead. Subagents: python3 .claude/scripts/build.py or python3 .claude/scripts/test.py.\"}' ;; swift) echo \"$CMD\" | head -1 | grep -qE '^[[:space:]]*swift (build|test)' && echo '{\"decision\":\"block\",\"reason\":\"BLOCKED: Use the build-runner or test-runner skill instead. Subagents: python3 .claude/scripts/build.py or python3 .claude/scripts/test.py.\"}' || echo '{}' ;; *) echo '{}' ;; esac",
+            "timeout": 5,
+            "statusMessage": "Checking for forbidden build/test commands..."
+          },
+          {
+            "type": "command",
+            "command": "CMD=$(jq -r '.tool_input.command'); FIRST=$(echo \"$CMD\" | head -1 | sed 's/^[[:space:]]*//' | awk '{print $1}'); case \"$FIRST\" in grep|rg) echo '{\"decision\":\"block\",\"reason\":\"BLOCKED: Use the Grep tool instead of grep/rg via Bash. Grep supports regex, glob filters, context lines, and multiple output modes.\"}' ;; cat|head|tail) echo '{\"decision\":\"block\",\"reason\":\"BLOCKED: Use the Read tool instead of cat/head/tail via Bash. Read supports offset and limit parameters for partial file reading.\"}' ;; find) echo '{\"decision\":\"block\",\"reason\":\"BLOCKED: Use the Glob tool instead of find via Bash. Glob supports patterns like **/*.swift for recursive file discovery.\"}' ;; sed|awk) echo '{\"decision\":\"block\",\"reason\":\"BLOCKED: Use the Edit tool instead of sed/awk via Bash. Edit performs exact string replacements in files.\"}' ;; *) echo '{}' ;; esac",
+            "timeout": 5,
+            "statusMessage": "Checking for dedicated tool alternatives..."
+          }
+        ]
+      }
+    ]
+  }
+}

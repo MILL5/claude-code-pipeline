@@ -10,7 +10,7 @@ Claude Code is powerful, but complex multi-file features benefit from structured
 - Regressions that slip through because tests weren't run
 - Commits with inconsistent messages and no traceability
 
-This pipeline enforces a disciplined workflow: **clarify -> plan -> implement -> review -> test -> commit -> manual verify -> finalize**. Every step is handled by a specialized agent with the right model (Haiku for mechanical tasks, Sonnet for judgment, Opus for architecture) — optimizing both quality and cost.
+This pipeline enforces a disciplined workflow: **clarify -> plan -> implement -> review -> test -> commit -> manual verify -> finalize -> analyze token usage**. Every step is handled by a specialized agent with the right model (Haiku for mechanical tasks, Sonnet for judgment, Opus for architecture) — optimizing both quality and cost.
 
 The pipeline is **tech-stack-agnostic**. The core workflow is identical whether you're building a Swift/iOS app, a React frontend, or a Python API. Stack-specific knowledge (build commands, code review rules, testing patterns) lives in **adapters** that get injected at runtime.
 
@@ -67,6 +67,10 @@ Step 4: FINALIZE ─────────────────────
     |  Update PR body with coverage numbers
     |  Mark PR ready for review
     |  Report: PR URL, tasks completed, coverage summary
+    v
+Step 5: TOKEN ANALYSIS ──────────────────── token-analysis skill (mandatory)
+    |  Analyze TOKEN_LEDGER: cost, model distribution, prompt efficiency
+    |  File GitHub issue on pipeline repo if significant findings
     v
 User merges when ready (pipeline never auto-merges)
 ```
@@ -138,13 +142,14 @@ Then use any of these to trigger the pipeline:
 
 ### What Each Adapter Provides
 
-Every adapter includes 8 files:
+Every adapter includes 9 files:
 
 | File | Purpose |
 |------|---------|
 | `adapter.md` | Stack metadata: name, languages, build/test commands, blocked commands, conventions |
 | `architect-overlay.md` | Framework-specific complexity patterns for task decomposition and model assignment |
-| `implementer-overlay.md` | Language-specific code quality rules injected into the implementer agent |
+| `implementer-overlay.md` | Language-specific code quality rules injected into the implementer agent (full version) |
+| `implementer-overlay-essential.md` | Compact rules-only variant (~500-800 chars) used for Haiku tasks to maximize signal-to-noise ratio |
 | `reviewer-overlay.md` | Stack-specific code review checklist (8 categories per adapter) |
 | `test-overlay.md` | Testing framework patterns, assertion conventions, mocking strategies |
 | `hooks.json` | PreToolUse hooks that block raw build/test commands (forces pipeline skill usage) |
@@ -177,6 +182,7 @@ Agents are **generic** — they contain no tech-stack-specific knowledge. Stack 
 | `test-runner` | "run tests", "check tests", "validate" | Delegates to adapter's `test.py` script |
 | `open-pr` | Step 1.5 (via orchestrator) or "open a PR" | Creates feature branch + draft PR |
 | `summarize-implementation` | After implementation tasks | Generates conventional-commit messages |
+| `token-analysis` | Step 5 (via orchestrator, mandatory) | Analyzes pipeline token usage, files GitHub issues for optimization findings |
 
 ### Adapter Injection Flow
 
@@ -190,6 +196,7 @@ Loads adapters/<stack>/adapter.md (metadata)
 For each agent launch:
     1. Read generic agent definition (agents/<name>.md)
     2. Read relevant overlay (adapters/<stack>/<name>-overlay.md)
+       - Haiku implementers: use implementer-overlay-essential.md instead
     3. Insert overlay at <!-- ADAPTER:TECH_STACK_CONTEXT --> marker
     4. Pass composed prompt to Agent tool
 ```
@@ -211,33 +218,47 @@ The pipeline is designed to minimize Claude API costs:
 
 A typical feature plan targets **>=70% Haiku tasks**, making the mixed strategy significantly cheaper than running everything on Sonnet or Opus.
 
+### Token Optimization
+
+The pipeline also reduces per-step token consumption through several strategies:
+
+- **Scoped ORCHESTRATOR.md extracts**: Instead of pasting the full architecture file into every agent, the orchestrator extracts only the sections each agent needs (e.g., blast-radius analysis only gets Directory Structure, Fragile Areas, and Key Services)
+- **Essential overlay variants**: Haiku implementers receive a compact rules-only overlay (~500-800 chars) instead of the full overlay with examples (~3,500 chars). The reviewer has the full overlay and catches violations.
+- **Reviewer reuse via SendMessage**: Within a wave, one code-reviewer agent handles all reviews via SendMessage, avoiding re-ingestion of the agent definition and overlay per review (cap: 8 reviews per agent)
+- **TOKEN_REPORT protocol**: All agents append a `---TOKEN_REPORT---` block to their output, self-reporting files read from disk, tool calls, and token consumption. This captures the ~43% of token usage invisible to the orchestrator's prompt-level tracking.
+- **Mandatory Step 5 analysis**: After every pipeline run, the token-analysis skill examines the accumulated ledger for cost anomalies, model distribution drift, prompt bloat, and escalation patterns — filing a GitHub issue on the pipeline repo when significant findings exist
+
 ## Project Structure
 
 ```
 claude-code-pipeline/
 |-- init.sh                              # Bootstrap script
+|-- CLAUDE.md                            # Guidance for Claude Code in this repo
 |-- README.md
 |
 |-- agents/                              # Generic agent definitions
 |   |-- architect-agent.md               # Plans features, routes to analyzer/planner skills
 |   |-- implementer-agent.md             # Executes tasks from context briefs
+|   |-- implementer-contract.md          # Canonical Haiku readiness checklist (single source of truth)
 |   |-- code-reviewer-agent.md           # Aggressive code review (PASS/FAIL)
 |   +-- test-architect-agent.md          # Generates test suites
 |
 |-- skills/                              # Generic skill definitions
-|   |-- orchestrate/SKILL.md             # Master pipeline (446 lines)
+|   |-- orchestrate/SKILL.md             # Master pipeline coordinator
 |   |-- architect-analyzer/SKILL.md      # Step 1a: requirements clarification
 |   |-- architect-planner/SKILL.md       # Step 1b: cost-optimized decomposition
 |   |-- build-runner/SKILL.md            # Delegates to adapter build script
 |   |-- test-runner/SKILL.md             # Delegates to adapter test script
 |   |-- open-pr/SKILL.md                 # Branch + draft PR creation
-|   +-- summarize-implementation/SKILL.md # Conventional commit messages
+|   |-- summarize-implementation/SKILL.md # Conventional commit messages
+|   +-- token-analysis/SKILL.md          # Step 5: token usage analysis + issue filing
 |
 |-- adapters/
 |   |-- swift-ios/                       # Apple ecosystem adapter
 |   |   |-- adapter.md                   # Xcode, XCTest, xccov
 |   |   |-- architect-overlay.md         # Apple framework complexity patterns
 |   |   |-- implementer-overlay.md       # Swift code quality, @MainActor, MVVM
+|   |   |-- implementer-overlay-essential.md  # Compact rules-only variant for Haiku
 |   |   |-- reviewer-overlay.md          # Memory leaks, retain cycles, battery
 |   |   |-- test-overlay.md              # XCTest patterns, actor isolation
 |   |   |-- hooks.json                   # Block xcodebuild, swift build
@@ -249,6 +270,7 @@ claude-code-pipeline/
 |   |   |-- adapter.md                   # npm/yarn/pnpm, Jest/Vitest
 |   |   |-- architect-overlay.md         # Component hierarchy, state management
 |   |   |-- implementer-overlay.md       # TypeScript strict, hooks rules, JSX
+|   |   |-- implementer-overlay-essential.md  # Compact rules-only variant for Haiku
 |   |   |-- reviewer-overlay.md          # Re-renders, XSS, bundle size, a11y
 |   |   |-- test-overlay.md              # RTL patterns, mocking, snapshots
 |   |   |-- hooks.json                   # Block npm test, npx jest
@@ -260,6 +282,7 @@ claude-code-pipeline/
 |       |-- adapter.md                   # pip/poetry/uv, pytest, mypy/ruff
 |       |-- architect-overlay.md         # Module decomposition, async, Django/FastAPI
 |       |-- implementer-overlay.md       # Type hints, dataclasses, PEP conventions
+|       |-- implementer-overlay-essential.md  # Compact rules-only variant for Haiku
 |       |-- reviewer-overlay.md          # GIL, security, resource management
 |       |-- test-overlay.md              # pytest fixtures, parametrize, async
 |       |-- hooks.json                   # Block pytest, mypy directly
@@ -290,6 +313,7 @@ claude-code-pipeline/
    - Asks you to manually test
    - Fixes any bugs you report
    - Finalizes the PR
+   - Analyzes token usage and files a GitHub issue on the pipeline repo if it finds optimization opportunities
 
 ### Running Individual Skills
 
@@ -362,7 +386,7 @@ To add support for a new tech stack (e.g., Rust, Go, Java):
 mkdir -p adapters/your-stack/scripts
 ```
 
-### 2. Create the 8 required files
+### 2. Create the 9 required files
 
 **`adapter.md`** — Stack metadata following this structure:
 ```markdown
@@ -393,6 +417,8 @@ This adapter activates when the project root contains:
 ```
 
 **Overlay files** — Provide stack-specific content for each agent. Look at existing adapters for the pattern. Each overlay is injected at `<!-- ADAPTER:TECH_STACK_CONTEXT -->` markers in the generic agents.
+
+**`implementer-overlay-essential.md`** — A compact, rules-only version of the implementer overlay (~500-800 chars, 8-12 bullet points, no examples). Used for Haiku tasks to maximize the signal-to-noise ratio. Include only the rules that, if violated, would fail code review. See existing adapters for reference.
 
 **`hooks.json`** — Block raw build/test commands:
 ```json

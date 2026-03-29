@@ -137,7 +137,7 @@ A context brief includes:
 2. **File(s) to create/modify**: Exact paths
 3. **Inputs**: What files, types, interfaces this task depends on (provide the actual code/signatures, not references to other tasks)
 4. **Output specification**: Exact public API, method signatures, expected behavior
-5. **Constraints**: Naming conventions, patterns to follow, error handling approach
+5. **Constraints**: Naming conventions, patterns to follow, error handling approach. For Haiku tasks, embed the 1-2 most relevant rules from the adapter's `implementer-overlay-essential.md` that apply to this specific task (e.g., "Cleanup all effects in useEffect return function" for a component with side effects, or "Use `raise ... from e` to preserve exception chains" for error handling code). This makes the brief self-contained and targeted — the implementer does not need to scan the full overlay.
 6. **Verification**: How to know the task is done correctly (build and test commands)
 7. **Anti-patterns**: Common mistakes to avoid for this specific task (1-2 max)
 
@@ -247,13 +247,8 @@ The plan MUST be output as a structured document following this exact format:
 
 Before finalizing the plan, verify each task against these criteria:
 
-**Haiku readiness checklist** (every Haiku task must pass ALL):
-- [ ] Self-contained: brief includes all needed interfaces, types, and signatures inline
-- [ ] Single responsibility: produces exactly one file or one logical unit
-- [ ] Fully specified: no design decisions left to the implementer
-- [ ] Under 150 lines of expected output (if longer, split further)
-- [ ] Verification command provided
-- [ ] No references to "see task X" — all dependencies are materialized inline
+**Haiku readiness checklist** — read `.claude/agents/implementer-contract.md` for the canonical
+6-point contract. Every Haiku task must pass ALL items in that contract.
 
 **Sonnet justification checklist** (every Sonnet task must fail at least one Haiku check AND pass all):
 - [ ] Cannot be further decomposed without losing essential coherence

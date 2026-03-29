@@ -1,0 +1,18 @@
+Running pytest with coverage...
+
+tests/test_calculator.py::test_add_positive_numbers PASSED
+tests/test_calculator.py::test_add_negative_numbers PASSED
+tests/test_calculator.py::test_multiply_basic PASSED
+tests/test_calculator.py::test_multiply_by_zero PASSED
+tests/test_calculator.py::test_divide_basic PASSED
+tests/test_calculator.py::test_divide_by_zero_raises FAILED
+tests/test_calculator.py::test_power_basic PASSED
+tests/test_calculator.py::test_power_overflow FAILED
+
+FAILURES:
+  test_divide_by_zero_raises: ZeroDivisionError not raised
+  test_power_overflow: Expected OverflowError, got 1.7976931348623157e+308
+
+Coverage:  calculator: 78.3%  |  utils: 87.5%
+
+Summary: Total: 8, Passed: 6, Failed: 2 | Coverage: 81.4%

@@ -1,0 +1,18 @@
+Running pytest with coverage...
+
+tests/test_calculator.py::test_add_positive_numbers PASSED
+tests/test_calculator.py::test_add_negative_numbers PASSED
+tests/test_calculator.py::test_add_zero PASSED
+tests/test_calculator.py::test_multiply_basic PASSED
+tests/test_calculator.py::test_multiply_by_zero PASSED
+tests/test_calculator.py::test_multiply_negative PASSED
+tests/test_calculator.py::test_multiply_floats PASSED
+tests/test_calculator.py::test_divide_basic PASSED
+tests/test_calculator.py::test_divide_by_zero_raises PASSED
+tests/test_calculator.py::test_power_basic PASSED
+
+Coverage:  calculator: 94.2%  |  utils: 87.5%
+
+Summary: Total: 10, Passed: 10, Failed: 0 | Coverage: 92.1%
+
+All tests passed.

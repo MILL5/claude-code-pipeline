@@ -1,0 +1,11 @@
+### DEFECT REPORT
+
+**Severity:** HIGH
+
+#### Steps to Reproduce
+
+1. Do the thing
+
+#### Expected Behavior
+
+#### Actual Behavior

@@ -183,6 +183,7 @@ Agents are **generic** — they contain no tech-stack-specific knowledge. Stack 
 | `open-pr` | Step 1.5 (via orchestrator) or "open a PR" | Creates feature branch + draft PR |
 | `summarize-implementation` | After implementation tasks | Generates conventional-commit messages |
 | `token-analysis` | Step 5 (via orchestrator, mandatory) | Analyzes pipeline token usage, files GitHub issues for optimization findings |
+| `fix-defects` | `/fix-defects`, "fix defects", "fix PR defects" | Reads defect reports from PR comments, triages by severity, runs fix pipeline |
 
 ### Adapter Injection Flow
 
@@ -251,7 +252,8 @@ claude-code-pipeline/
 |   |-- test-runner/SKILL.md             # Delegates to adapter test script
 |   |-- open-pr/SKILL.md                 # Branch + draft PR creation
 |   |-- summarize-implementation/SKILL.md # Conventional commit messages
-|   +-- token-analysis/SKILL.md          # Step 5: token usage analysis + issue filing
+|   |-- token-analysis/SKILL.md          # Step 5: token usage analysis + issue filing
+|   +-- fix-defects/SKILL.md             # Standalone: fix defects from PR comments
 |
 |-- adapters/
 |   |-- swift-ios/                       # Apple ecosystem adapter
@@ -303,7 +305,12 @@ claude-code-pipeline/
 |   |   |-- build-failure.txt            # BUILD FAILED output
 |   |   |-- test-success.txt             # Summary line with coverage
 |   |   |-- test-failure.txt             # Summary line with failures
-|   |   +-- token-report.txt             # Standalone TOKEN_REPORT block
+|   |   |-- token-report.txt             # Standalone TOKEN_REPORT block
+|   |   |-- defect-report-critical.txt   # CRITICAL severity defect report
+|   |   |-- defect-report-high.txt       # HIGH severity defect report
+|   |   |-- defect-report-medium.txt     # MEDIUM severity defect report
+|   |   |-- defect-report-invalid.txt    # Invalid defect report (missing fields)
+|   |   +-- defect-report-not-a-report.txt # Non-defect PR comment
 |   +-- smoke/                           # Layer 4: end-to-end smoke test
 |       |-- run_smoke.py                 # Bootstrap + validate + optional full run
 |       +-- calculator/                  # Minimal Python fixture project
@@ -311,7 +318,8 @@ claude-code-pipeline/
 +-- templates/                           # Project file templates
     |-- CLAUDE.md.template               # Starting point for project CLAUDE.md
     |-- ORCHESTRATOR.md.template         # Starting point for project ORCHESTRATOR.md
-    +-- pipeline.config.template         # Config file format reference
+    |-- pipeline.config.template         # Config file format reference
+    +-- defect-report.md                # Defect report template for PR comments
 ```
 
 ## How-To Guide
@@ -342,6 +350,7 @@ You don't have to use the full pipeline. Individual skills work standalone:
 /test-runner                     # Run tests with coverage
 /open-pr                         # Create a branch + draft PR
 /summarize-implementation        # Generate a commit message from current diff
+/fix-defects                     # Fix defects reported on a PR
 ```
 
 ### Updating the Pipeline
@@ -393,6 +402,25 @@ After implementation, the pipeline enters a manual testing phase:
 - Every fix must maintain or increase the test count
 - If a fix drops the count, it's rejected automatically
 - After 3 fix cycles, the pipeline escalates to you for manual triage
+
+### Structured Defect Reporting on PRs
+
+For teams with dedicated testers or async review workflows, the pipeline supports structured defect reports as GitHub PR comments:
+
+1. **Testers** copy the template from `templates/defect-report.md` into PR comments
+2. Each defect has: severity (CRITICAL/HIGH/MEDIUM/LOW), steps to reproduce, expected/actual behavior, screenshots (drag-and-drop), environment info
+3. **Developer** runs `/fix-defects` in Claude Code
+4. The pipeline:
+   - Reads all defect report comments from the PR via GitHub API
+   - Validates required fields (replies to invalid reports with an error)
+   - Triages by severity (CRITICAL first)
+   - Runs blast-radius analysis for complex/critical defects
+   - Fixes each defect (Sonnet for CRITICAL/HIGH/MEDIUM, Haiku for simple LOW)
+   - Reviews each fix
+   - Commits, pushes, and replies to the original comment with the fix commit
+5. Summary report shows which defects were fixed and which need manual attention
+
+This decouples testing from the pipeline session — testers report defects asynchronously on the PR, and the developer processes them all at once.
 
 ## Writing a Custom Adapter
 
@@ -542,14 +570,14 @@ The pipeline includes a 4-layer integration test suite that validates structural
 
 ```bash
 # Layer 1: Static validation — checks all files exist, markers present,
-# cross-references resolve, overlays within size limits (147 checks, instant)
+# cross-references resolve, overlays within size limits (163 checks, instant)
 python3 tests/validate_structure.py
 
 # Layer 2: Dry-run mode — planned but not yet implemented.
 # Will compose all prompts without launching agents for prompt validation.
 
 # Layer 3: Contract tests — validates output protocol parsers against
-# golden fixtures for all agent and script output formats (24 tests, instant)
+# golden fixtures for all agent and script output formats (34 tests, instant)
 python3 tests/test_contracts.py
 
 # Layer 4: Smoke test — creates a temporary project, runs init.sh,
@@ -575,6 +603,8 @@ python3 tests/smoke/run_smoke.py --full
 | Symlink resolution errors | | | x |
 | Adapter hook merging | | | x |
 | Agent quality degradation | | | x (full) |
+| Defect report parsing errors | | x | |
+| Fix-defects skill structure | x | | |
 
 ### Adding Tests for New Adapters
 

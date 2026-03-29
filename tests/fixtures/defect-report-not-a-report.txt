@@ -1,0 +1,5 @@
+Hey team, I noticed some issues with the login flow but I'll file them separately.
+
+Also, can we update the README to mention the new authentication method?
+
+Thanks!

@@ -1,0 +1,30 @@
+### DEFECT REPORT
+
+**Severity:** HIGH
+**Component:** dashboard charts
+
+#### Steps to Reproduce
+
+1. Log in to the application
+2. Navigate to the dashboard
+3. Observe the revenue chart in the top-right section
+
+#### Expected Behavior
+
+The revenue chart should display the last 30 days of revenue data with proper axis labels.
+
+#### Actual Behavior
+
+The chart renders as an empty white box with no data points, axes, or labels. No errors in the console.
+
+#### Screenshots
+
+![empty-chart](https://user-images.githubusercontent.com/12345/empty-chart.png)
+
+#### Environment
+
+- **Browser/Device:** Safari 17.2, iPhone 15 Pro
+
+#### Additional Context
+
+The API endpoint returns valid data (verified in Network tab). The issue appears to be in the chart rendering component.

@@ -291,8 +291,9 @@ claude-code-pipeline/
 |           +-- test.py                  # pytest runner with coverage
 |
 |-- tests/                               # Pipeline self-tests (4 layers)
-|   |-- validate_structure.py            # Layer 1: structural integrity (146 checks)
+|   |-- validate_structure.py            # Layer 1: structural integrity (147 checks)
 |   |-- test_contracts.py                # Layer 3: output protocol contract tests
+|   |-- parsers.py                       # Shared output protocol parsers (used by L3 + L4)
 |   |-- fixtures/                        # Golden output fixtures for contract tests
 |   |   |-- implementer-success.txt      # SUCCESS + commit message + TOKEN_REPORT
 |   |   |-- implementer-failure.txt      # FAILURE + reason + details + TOKEN_REPORT
@@ -541,8 +542,11 @@ The pipeline includes a 4-layer integration test suite that validates structural
 
 ```bash
 # Layer 1: Static validation — checks all files exist, markers present,
-# cross-references resolve, overlays within size limits (146 checks, instant)
+# cross-references resolve, overlays within size limits (147 checks, instant)
 python3 tests/validate_structure.py
+
+# Layer 2: Dry-run mode — planned but not yet implemented.
+# Will compose all prompts without launching agents for prompt validation.
 
 # Layer 3: Contract tests — validates output protocol parsers against
 # golden fixtures for all agent and script output formats (24 tests, instant)

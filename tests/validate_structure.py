@@ -91,6 +91,7 @@ ORCHESTRATOR_TEMPLATE_SECTIONS = [
 EXTRACT_PROFILES = {
     "1a": [
         "Project Overview",
+        "Targets / Entry Points",
         "Directory Structure",
         "Architecture",
         "Key Services / Modules",
@@ -369,7 +370,7 @@ def check_orchestrate_reviewer_reuse(result: ValidationResult) -> None:
     else:
         result.fail("Orchestrate missing reviewer reuse (SendMessage + NEW REVIEW)")
 
-    if "Cap at 8 reviews" in content or "cap" in content.lower() and "8" in content:
+    if "Cap at 8 reviews" in content or ("cap" in content.lower() and "8 reviews" in content.lower()):
         result.ok("Orchestrate documents 8-review cap per reviewer agent")
     else:
         result.fail("Orchestrate missing 8-review cap documentation")

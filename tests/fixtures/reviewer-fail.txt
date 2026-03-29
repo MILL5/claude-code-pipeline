@@ -1,0 +1,29 @@
+FAIL
+ISSUE: CRITICAL
+FILE: src/calculator.py
+LINE: 23-27
+PROBLEM: Division by zero not handled in divide() function
+FIX: Add guard clause raising ValueError when divisor is zero
+
+ISSUE: HIGH
+FILE: src/calculator.py
+LINE: 42
+PROBLEM: Unchecked integer overflow in power() for large exponents
+FIX: Add bounds check or use Python's arbitrary precision with a reasonable limit
+
+--- OPTIONAL IMPROVEMENTS ---
+Consider extracting validation helpers to reduce duplication across arithmetic functions
+The error messages could include the actual values that caused the failure for debugging
+
+---TOKEN_REPORT---
+FILES_READ:
+- src/calculator.py (~520 chars)
+- tests/test_calculator.py (~1100 chars)
+- src/types.py (~200 chars)
+TOOL_CALLS:
+- Read: 5
+- Grep: 3
+- Glob: 1
+SELF_ASSESSED_INPUT: ~7200 chars
+SELF_ASSESSED_OUTPUT: ~900 chars
+---END_TOKEN_REPORT---

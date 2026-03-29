@@ -25,7 +25,14 @@ python3 .claude/scripts/build.py [OPTIONS]
 python3 .claude/scripts/test.py [OPTIONS]
 ```
 
-There are no tests, linters, or build steps for the pipeline repository itself.
+**Pipeline self-tests** (from the pipeline repo root):
+```bash
+python3 tests/validate_structure.py          # Layer 1: structural integrity (147 checks)
+python3 tests/test_contracts.py              # Layer 3: output protocol contract tests (24 tests)
+python3 tests/smoke/run_smoke.py             # Layer 4: bootstrap smoke test (init.sh + scripts)
+python3 tests/smoke/run_smoke.py --full      # Layer 4: full pipeline smoke test (costs ~$0.50-1.00)
+```
+Layer 2 (dry-run mode for prompt composition validation) is planned but not yet implemented.
 
 ## Architecture
 

@@ -290,6 +290,24 @@ claude-code-pipeline/
 |           |-- build.py                 # mypy + ruff runner
 |           +-- test.py                  # pytest runner with coverage
 |
+|-- tests/                               # Pipeline self-tests (4 layers)
+|   |-- validate_structure.py            # Layer 1: structural integrity (147 checks)
+|   |-- test_contracts.py                # Layer 3: output protocol contract tests
+|   |-- parsers.py                       # Shared output protocol parsers (used by L3 + L4)
+|   |-- fixtures/                        # Golden output fixtures for contract tests
+|   |   |-- implementer-success.txt      # SUCCESS + commit message + TOKEN_REPORT
+|   |   |-- implementer-failure.txt      # FAILURE + reason + details + TOKEN_REPORT
+|   |   |-- reviewer-pass.txt            # PASS + suggestions + TOKEN_REPORT
+|   |   |-- reviewer-fail.txt            # FAIL + issues + optional improvements + TOKEN_REPORT
+|   |   |-- build-success.txt            # BUILD SUCCEEDED output
+|   |   |-- build-failure.txt            # BUILD FAILED output
+|   |   |-- test-success.txt             # Summary line with coverage
+|   |   |-- test-failure.txt             # Summary line with failures
+|   |   +-- token-report.txt             # Standalone TOKEN_REPORT block
+|   +-- smoke/                           # Layer 4: end-to-end smoke test
+|       |-- run_smoke.py                 # Bootstrap + validate + optional full run
+|       +-- calculator/                  # Minimal Python fixture project
+|
 +-- templates/                           # Project file templates
     |-- CLAUDE.md.template               # Starting point for project CLAUDE.md
     |-- ORCHESTRATOR.md.template         # Starting point for project ORCHESTRATOR.md
@@ -515,6 +533,52 @@ Your project's living architecture document. The template provides the full stru
 - **Conventions**: Naming, patterns, error handling
 - **Known Fragile Areas**: Parts of the codebase that need extra care
 - **Current State**: Build/test status, updated after each pipeline run
+
+## Testing the Pipeline
+
+The pipeline includes a 4-layer integration test suite that validates structural integrity, output contracts, and end-to-end bootstrap without making API calls.
+
+### Running Tests
+
+```bash
+# Layer 1: Static validation — checks all files exist, markers present,
+# cross-references resolve, overlays within size limits (147 checks, instant)
+python3 tests/validate_structure.py
+
+# Layer 2: Dry-run mode — planned but not yet implemented.
+# Will compose all prompts without launching agents for prompt validation.
+
+# Layer 3: Contract tests — validates output protocol parsers against
+# golden fixtures for all agent and script output formats (24 tests, instant)
+python3 tests/test_contracts.py
+
+# Layer 4: Smoke test — creates a temporary project, runs init.sh,
+# validates bootstrap output, runs build/test scripts (30s, no API calls)
+python3 tests/smoke/run_smoke.py
+
+# Layer 4 (full): Same as above + runs full pipeline with a trivial task
+# WARNING: Makes real API calls, costs ~$0.50-1.00
+python3 tests/smoke/run_smoke.py --full
+```
+
+### What Each Layer Catches
+
+| Failure Type | L1 Static | L3 Contract | L4 Smoke |
+|---|---|---|---|
+| Missing/renamed files | x | | |
+| Overlay injection markers broken | x | | |
+| Output protocol drift | x | x | |
+| Essential overlay size regression | x | | |
+| TOKEN_REPORT format changes | x | x | |
+| Build/test script output parsing | | x | |
+| init.sh bootstrap failures | | | x |
+| Symlink resolution errors | | | x |
+| Adapter hook merging | | | x |
+| Agent quality degradation | | | x (full) |
+
+### Adding Tests for New Adapters
+
+When writing a custom adapter, run `python3 tests/validate_structure.py` after creating your files. It checks for all 9 required adapter files and validates the essential overlay is within the size limit. Add your adapter name to the `ADAPTERS` list in `validate_structure.py`.
 
 ## Requirements
 

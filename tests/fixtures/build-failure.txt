@@ -1,0 +1,13 @@
+Running mypy...
+Running ruff...
+
+File              Ln  Error
+─────────────────────────────────────
+calculator.py     23  error: Incompatible return type (got "Optional[float]", expected "float")
+calculator.py     45  error: Name "power_result" is not defined
+
+File              Ln  Warning
+─────────────────────────────────────
+utils.py          8   Missing return type annotation
+
+BUILD FAILED  |  2 error(s)  |  1 warning(s)

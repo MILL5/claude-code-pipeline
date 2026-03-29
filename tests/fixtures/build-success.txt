@@ -1,0 +1,10 @@
+Running mypy...
+Running ruff...
+
+File              Ln  Warning
+─────────────────────────────────────
+calculator.py     15  Unused import: typing.Optional
+calculator.py     42  Line too long (89 > 88)
+utils.py          8   Missing return type annotation
+
+BUILD SUCCEEDED  |  3 warning(s)

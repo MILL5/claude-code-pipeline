@@ -315,6 +315,9 @@ claude-code-pipeline/
 |       |-- run_smoke.py                 # Bootstrap + validate + optional full run
 |       +-- calculator/                  # Minimal Python fixture project
 |
+|-- docs/                                # Guides and documentation
+|   +-- testing-guide.md                # Manual testing & defect reporting guide
+|
 +-- templates/                           # Project file templates
     |-- CLAUDE.md.template               # Starting point for project CLAUDE.md
     |-- ORCHESTRATOR.md.template         # Starting point for project ORCHESTRATOR.md
@@ -421,6 +424,8 @@ For teams with dedicated testers or async review workflows, the pipeline support
 5. Summary report shows which defects were fixed and which need manual attention
 
 This decouples testing from the pipeline session — testers report defects asynchronously on the PR, and the developer processes them all at once.
+
+For the full guide (tester instructions, developer commands, severity definitions, screenshot tips, cost estimates, and a complete walkthrough), see **[docs/testing-guide.md](docs/testing-guide.md)**.
 
 ## Writing a Custom Adapter
 

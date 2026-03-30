@@ -1,0 +1,10 @@
+{
+  "name": "azure-sdk",
+  "display_name": "Azure SDK",
+  "capabilities": ["azure-auth"],
+  "detection": [
+    { "type": "file_contains", "path": "requirements.txt", "pattern": "^azure-" },
+    { "type": "file_contains", "path": "pyproject.toml", "pattern": "azure-" },
+    { "type": "file_contains", "path": "package.json", "pattern": "\"@azure/" }
+  ]
+}

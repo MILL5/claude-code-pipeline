@@ -11,8 +11,8 @@
 
 ## Build & Test Commands
 
-- **Build (lint/typecheck):** `python3 .claude/scripts/build.py [--project-dir .] [--scheme <tool>] [--configuration <strict|relaxed>]`
-- **Test:** `python3 .claude/scripts/test.py [--project-dir .] [--scheme <suite>] [--no-coverage] [--exclude-from-coverage '<pattern>']`
+- **Build (lint/typecheck):** `python3 .claude/scripts/python/build.py [--project-dir .] [--scheme <tool>] [--configuration <strict|relaxed>]`
+- **Test:** `python3 .claude/scripts/python/test.py [--project-dir .] [--scheme <suite>] [--no-coverage] [--exclude-from-coverage '<pattern>']`
 
 ## Blocked Commands
 

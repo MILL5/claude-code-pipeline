@@ -11,8 +11,8 @@
 
 ## Build & Test Commands
 
-- **Build (lint/compile):** `python3 .claude/scripts/build.py [--project-dir .] [--scheme <lint|build|all>]`
-- **Test:** `python3 .claude/scripts/test.py [--project-dir .] [--scheme <arm-ttk|psrule|what-if|all>] [--resource-group <name>] [--no-coverage]`
+- **Build (lint/compile):** `python3 .claude/scripts/bicep/build.py [--project-dir .] [--scheme <lint|build|all>]`
+- **Test:** `python3 .claude/scripts/bicep/test.py [--project-dir .] [--scheme <arm-ttk|psrule|what-if|all>] [--resource-group <name>] [--no-coverage]`
 
 ## Blocked Commands
 

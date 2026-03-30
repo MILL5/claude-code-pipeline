@@ -16,15 +16,38 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 from pathlib import Path
 
 PIPELINE_ROOT = Path(__file__).resolve().parent.parent
 
-ADAPTERS = ["python", "react", "swift-ios", "bicep"]
+
+def discover_adapters() -> list[str]:
+    """Auto-discover adapters from directory structure."""
+    adapters_dir = PIPELINE_ROOT / "adapters"
+    return sorted(
+        d.name for d in adapters_dir.iterdir()
+        if d.is_dir() and (d / "manifest.json").exists()
+    )
+
+
+def discover_overlays() -> list[str]:
+    """Auto-discover overlays from directory structure."""
+    overlays_dir = PIPELINE_ROOT / "overlays"
+    if not overlays_dir.exists():
+        return []
+    return sorted(
+        d.name for d in overlays_dir.iterdir()
+        if d.is_dir() and (d / "manifest.json").exists()
+    )
+
+
+ADAPTERS = discover_adapters()
 
 REQUIRED_ADAPTER_FILES = [
+    "manifest.json",
     "adapter.md",
     "architect-overlay.md",
     "implementer-overlay.md",
@@ -65,11 +88,12 @@ REQUIRED_SKILLS = [
 
 ESSENTIAL_OVERLAY_MAX_CHARS = 1000
 
-OVERLAYS = ["azure-sdk"]
+OVERLAYS = discover_overlays()
 
 # Overlays intentionally omit test-overlay.md: testing patterns for Azure SDK
 # are language-specific and covered by each adapter's own test overlay.
 REQUIRED_OVERLAY_FILES = [
+    "manifest.json",
     "architect-overlay.md",
     "implementer-overlay.md",
     "implementer-overlay-essential.md",
@@ -611,23 +635,74 @@ def check_orchestrate_overlay_loading(result: ValidationResult) -> None:
         result.fail("Orchestrate missing cross-cutting overlay composition documentation")
 
 
-def check_init_bicep_detection(result: ValidationResult) -> None:
-    """init.sh must contain Bicep stack detection."""
-    init_path = PIPELINE_ROOT / "init.sh"
-    if not init_path.exists():
-        return
+REQUIRED_ADAPTER_MANIFEST_FIELDS = ["name", "display_name", "capabilities", "detection", "stack_paths"]
+REQUIRED_OVERLAY_MANIFEST_FIELDS = ["name", "display_name", "capabilities", "detection"]
+VALID_DETECTION_TYPES = {"file_exists", "file_glob", "file_contains"}
 
-    content = init_path.read_text()
 
-    if "bicep" in content.lower():
-        result.ok("init.sh references bicep stack")
-    else:
-        result.fail("init.sh missing bicep stack detection")
+def check_manifest_validity(result: ValidationResult) -> None:
+    """Each adapter/overlay manifest.json must have required fields and valid structure."""
+    for adapter in ADAPTERS:
+        manifest_path = PIPELINE_ROOT / "adapters" / adapter / "manifest.json"
+        if not manifest_path.exists():
+            result.fail(f"Adapter {adapter}: missing manifest.json")
+            continue
 
-    if "detect_overlays" in content or "overlays" in content:
-        result.ok("init.sh supports overlay detection")
-    else:
-        result.fail("init.sh missing overlay detection support")
+        try:
+            data = json.loads(manifest_path.read_text())
+        except json.JSONDecodeError as e:
+            result.fail(f"Adapter {adapter}: manifest.json is invalid JSON: {e}")
+            continue
+
+        for field in REQUIRED_ADAPTER_MANIFEST_FIELDS:
+            if field in data:
+                result.ok(f"Adapter {adapter}: manifest has '{field}'")
+            else:
+                result.fail(f"Adapter {adapter}: manifest missing '{field}'")
+
+        # Verify name matches directory
+        if data.get("name") == adapter:
+            result.ok(f"Adapter {adapter}: manifest name matches directory")
+        else:
+            result.fail(f"Adapter {adapter}: manifest name '{data.get('name')}' != directory name '{adapter}'")
+
+        # Verify capabilities is a list
+        caps = data.get("capabilities")
+        if isinstance(caps, list):
+            result.ok(f"Adapter {adapter}: capabilities is a list")
+        else:
+            result.fail(f"Adapter {adapter}: capabilities must be a list")
+
+        # Verify detection rules have valid types
+        for rule in data.get("detection", []):
+            rtype = rule.get("type", "")
+            if rtype in VALID_DETECTION_TYPES:
+                result.ok(f"Adapter {adapter}: detection rule type '{rtype}' is valid")
+            else:
+                result.fail(f"Adapter {adapter}: invalid detection rule type '{rtype}'")
+
+    for overlay in OVERLAYS:
+        manifest_path = PIPELINE_ROOT / "overlays" / overlay / "manifest.json"
+        if not manifest_path.exists():
+            result.fail(f"Overlay {overlay}: missing manifest.json")
+            continue
+
+        try:
+            data = json.loads(manifest_path.read_text())
+        except json.JSONDecodeError as e:
+            result.fail(f"Overlay {overlay}: manifest.json is invalid JSON: {e}")
+            continue
+
+        for field in REQUIRED_OVERLAY_MANIFEST_FIELDS:
+            if field in data:
+                result.ok(f"Overlay {overlay}: manifest has '{field}'")
+            else:
+                result.fail(f"Overlay {overlay}: manifest missing '{field}'")
+
+        if data.get("name") == overlay:
+            result.ok(f"Overlay {overlay}: manifest name matches directory")
+        else:
+            result.fail(f"Overlay {overlay}: manifest name '{data.get('name')}' != directory name '{overlay}'")
 
 
 def run_all_checks(verbose: bool = False) -> ValidationResult:
@@ -654,7 +729,7 @@ def run_all_checks(verbose: bool = False) -> ValidationResult:
         ("Overlay completeness", check_overlay_completeness),
         ("Overlay essential size", check_overlay_essential_size),
         ("Orchestrate overlay loading", check_orchestrate_overlay_loading),
-        ("init.sh bicep detection", check_init_bicep_detection),
+        ("Manifest validity", check_manifest_validity),
     ]
 
     for name, check_fn in checks:

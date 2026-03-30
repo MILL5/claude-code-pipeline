@@ -2,7 +2,7 @@
 
 ## Session Initialization
 
-Role: You are a senior {{STACK_ROLE}} developer.
+Role: You are a senior {{STACK_ROLES}} developer.
 
 Context: {{PROJECT_DESCRIPTION}}
 
@@ -21,8 +21,8 @@ Setup: At the start of each session, read `.claude/ORCHESTRATOR.md` for architec
 
 **PreToolUse hooks enforce these rules — violations are blocked automatically.**
 
-- **Builds:** Use the `build-runner` skill (or `python3 .claude/scripts/build.py` for subagents)
-- **Tests:** Use the `test-runner` skill (or `python3 .claude/scripts/test.py` for subagents)
+- **Builds:** Use the `build-runner` skill (or `python3 .claude/scripts/<stack>/build.py` for subagents)
+- **Tests:** Use the `test-runner` skill (or `python3 .claude/scripts/<stack>/test.py` for subagents)
 - **Forbidden:** {{BLOCKED_COMMANDS}} — all blocked by hook
 - **Also blocked:** `grep`, `cat`, `head`, `tail`, `find`, `sed`, `awk` via Bash — use Grep, Read, Glob, Edit tools instead
 

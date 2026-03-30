@@ -168,7 +168,7 @@ The Bicep adapter teaches the pipeline's 4 generic agents about Infrastructure a
 
 ### Build Script
 
-`python3 .claude/scripts/build.py` runs:
+`python3 .claude/scripts/bicep/build.py` runs:
 
 1. **`bicep lint`** (via `az bicep lint` or `bicep build` with `bicepconfig.json` rules)
 2. **`bicep build`** (compiles each `.bicep` to ARM JSON)
@@ -188,7 +188,7 @@ main.bicep                18  [BCP035] missing required property "location"
 
 ### Test Script
 
-`python3 .claude/scripts/test.py` auto-detects and runs available frameworks:
+`python3 .claude/scripts/bicep/test.py` auto-detects and runs available frameworks:
 
 | Framework | Detection | What it tests |
 |-----------|----------|--------------|

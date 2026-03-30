@@ -1,0 +1,18 @@
+{
+  "name": "bicep",
+  "display_name": "Azure Bicep (IaC)",
+  "capabilities": ["azure-auth"],
+  "implies_overlays": ["azure-sdk"],
+  "detection": [
+    { "type": "file_glob", "pattern": "*.bicep" },
+    { "type": "file_glob", "pattern": "infra/*.bicep" },
+    { "type": "file_glob", "pattern": "infrastructure/*.bicep" },
+    { "type": "file_glob", "pattern": "deploy/*.bicep" },
+    { "type": "file_glob", "pattern": "modules/*.bicep" },
+    { "type": "file_exists", "path": "bicepconfig.json" }
+  ],
+  "stack_paths": {
+    "directories": ["infra", "infrastructure", "deploy"],
+    "fallback_globs": ["**/*.bicep", "**/*.bicepparam", "bicepconfig.json"]
+  }
+}

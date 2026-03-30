@@ -16,7 +16,7 @@ context — it does not manage credentials.
 
 ## When to Use
 
-- **Automatically**: The orchestrator calls this before Azure-dependent pipeline steps when `stack=bicep` or `overlays=azure-sdk`.
+- **Automatically**: The orchestrator calls this before Azure-dependent pipeline steps when the active capabilities include `azure-auth`.
 - **Manually**: Run `/azure-login` to verify your Azure context or switch subscriptions.
 - **Before deployment**: `deploy-bicep` and `validate-bicep` (what-if) invoke this as a pre-flight gate.
 

@@ -11,8 +11,8 @@
 
 ## Build & Test Commands
 
-- **Build:** `python3 .claude/scripts/build.py [--project-dir .] [--scheme <script-name>] [--configuration dev|production]`
-- **Test:** `python3 .claude/scripts/test.py [--project-dir .] [--scheme <script-name>] [--no-coverage] [--exclude-from-coverage '<pattern>']`
+- **Build:** `python3 .claude/scripts/react/build.py [--project-dir .] [--scheme <script-name>] [--configuration dev|production]`
+- **Test:** `python3 .claude/scripts/react/test.py [--project-dir .] [--scheme <script-name>] [--no-coverage] [--exclude-from-coverage '<pattern>']`
 
 ## Blocked Commands
 

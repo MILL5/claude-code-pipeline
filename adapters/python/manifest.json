@@ -1,0 +1,16 @@
+{
+  "name": "python",
+  "display_name": "Python",
+  "capabilities": [],
+  "implies_overlays": [],
+  "detection": [
+    { "type": "file_exists", "path": "pyproject.toml" },
+    { "type": "file_exists", "path": "setup.py" },
+    { "type": "file_exists", "path": "setup.cfg" },
+    { "type": "file_exists", "path": "requirements.txt" }
+  ],
+  "stack_paths": {
+    "directories": ["src/backend", "backend", "server", "api"],
+    "fallback_globs": ["**/*.py", "pyproject.toml", "requirements.txt", "setup.py"]
+  }
+}

@@ -22,7 +22,7 @@ Validates Bicep templates through linting, compilation, and an optional what-if 
 ### Step 1: Lint + Build
 
 ```bash
-python3 .claude/scripts/build.py --scheme all
+python3 .claude/scripts/bicep/build.py --scheme all
 ```
 
 This runs the Bicep linter and compiles all templates to ARM JSON. Any syntax errors, lint violations, or compilation failures are reported.
@@ -75,4 +75,4 @@ WHAT-IF SUMMARY | Create: N, Modify: N, Delete: N, NoChange: N
 - What-if does not make any changes — it is a read-only preview.
 - Lint + build can run without Azure credentials; what-if cannot.
 - Exit code 0 = all checks passed, 1 = errors found.
-- **Hooks:** The adapter's hooks block raw `az deployment` commands via Bash. The what-if commands shown above are for reference — when used from within the pipeline, they should be run via `python3 .claude/scripts/test.py --scheme what-if` or through this skill, not as raw Bash commands.
+- **Hooks:** The adapter's hooks block raw `az deployment` commands via Bash. The what-if commands shown above are for reference — when used from within the pipeline, they should be run via `python3 .claude/scripts/bicep/test.py --scheme what-if` or through this skill, not as raw Bash commands.

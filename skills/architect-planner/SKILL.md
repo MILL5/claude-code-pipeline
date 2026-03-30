@@ -138,14 +138,26 @@ A context brief includes:
 3. **Inputs**: What files, types, interfaces this task depends on (provide the actual code/signatures, not references to other tasks)
 4. **Output specification**: Exact public API, method signatures, expected behavior
 5. **Constraints**: Naming conventions, patterns to follow, error handling approach. For Haiku tasks, embed the 1-2 most relevant rules from the adapter's `implementer-overlay-essential.md` that apply to this specific task (e.g., "Cleanup all effects in useEffect return function" for a component with side effects, or "Use `raise ... from e` to preserve exception chains" for error handling code). This makes the brief self-contained and targeted — the implementer does not need to scan the full overlay.
-6. **Verification**: How to know the task is done correctly (build and test commands)
+6. **Verification**: How to know the task is done correctly — use the stack-specific build and test commands: `python3 .claude/scripts/<stack>/build.py` and `python3 .claude/scripts/<stack>/test.py`
 7. **Anti-patterns**: Common mistakes to avoid for this specific task (1-2 max)
 
 **Critical rule**: A context brief must be *self-contained*. Haiku should never need to read another task's brief to execute this one. If task B depends on task A's output, task B's brief must include the relevant interface/contract inline, not "see task A."
 
-### Step 5: Assign Models and Estimate
+### Step 5: Assign Models, Stacks, and Estimate
 
-For each task, assign a model using these rules:
+For each task, assign a **stack** and a **model**.
+
+**Stack assignment:** Use the STACK MAPPING provided by the orchestrator to match each task's
+file path(s) to a stack. This determines which adapter overlay and build/test scripts the
+implementer receives.
+
+- Match the task's primary file path against the `stack_paths` patterns (first match wins).
+- If a task touches files from multiple stacks, assign the stack of the primary file being
+  created/modified. If the task truly requires cross-stack coordination (e.g., wiring a
+  React component to a Python API), split it into separate per-stack tasks.
+- If only one stack is configured, all tasks get that stack.
+
+**Model assignment:** For each task, assign a model using these rules:
 
 | Task characteristics | Model | Typical cost |
 |---------------------|-------|-------------|
@@ -187,6 +199,13 @@ The plan MUST be output as a structured document following this exact format:
 | *All-Sonnet comparison* | | | | *$X.XX* |
 | *All-Opus comparison*   | | | | *$X.XX* |
 
+## Stack Distribution
+| Stack | Task Count | Files |
+|-------|-----------|-------|
+| react | X         | src/frontend/... |
+| python| X         | src/backend/... |
+| bicep | X         | infra/... |
+
 ## Execution Waves
 
 ### Wave 1: [Description]
@@ -195,7 +214,7 @@ The plan MUST be output as a structured document following this exact format:
 ---
 
 #### Task 1.1: [Descriptive Name]
-**Model:** Haiku | **Est. output:** ~X lines | **File(s):** `path/to/File`
+**Model:** Haiku | **Stack:** react | **Est. output:** ~X lines | **File(s):** `path/to/File`
 
 **Context Brief:**
 > **Objective:** [One sentence]
@@ -213,7 +232,7 @@ The plan MUST be output as a structured document following this exact format:
 > **Constraints:**
 > - [naming, patterns, error handling]
 >
-> **Verification:** `python3 .claude/scripts/build.py` succeeds, then `python3 .claude/scripts/test.py` passes with >=90% coverage
+> **Verification:** `python3 .claude/scripts/react/build.py` succeeds, then `python3 .claude/scripts/react/test.py` passes with >=90% coverage
 >
 > **Anti-patterns:**
 > - [what NOT to do]
@@ -221,7 +240,7 @@ The plan MUST be output as a structured document following this exact format:
 ---
 
 #### Task 1.2: [Descriptive Name]
-**Model:** Sonnet | **Est. output:** ~X lines | **File(s):** `path/to/File`
+**Model:** Sonnet | **Stack:** python | **Est. output:** ~X lines | **File(s):** `path/to/File`
 **Escalation reason:** [Why this can't be Haiku]
 
 **Context Brief:**

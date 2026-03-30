@@ -18,8 +18,12 @@ Use this skill **instead of** running test commands directly. Always invoke this
 ## How to Run
 
 ```bash
-python3 .claude/scripts/test.py [OPTIONS]
+python3 .claude/scripts/<stack>/test.py [OPTIONS]
 ```
+
+Replace `<stack>` with the tech stack being tested (e.g., `react`, `python`, `bicep`, `swift-ios`).
+For single-stack projects, there is only one subdirectory. For multi-stack projects, run the
+test script matching the stack of the files you modified.
 
 **Options:**
 | Flag | Default | Description |
@@ -31,17 +35,20 @@ python3 .claude/scripts/test.py [OPTIONS]
 
 **Examples:**
 ```bash
-# Run all tests with coverage
-python3 .claude/scripts/test.py
+# Single-stack project
+python3 .claude/scripts/react/test.py
+
+# Multi-stack: test specific stack
+python3 .claude/scripts/python/test.py
 
 # Specific test target
-python3 .claude/scripts/test.py --scheme MyAppTests
+python3 .claude/scripts/swift-ios/test.py --scheme MyAppTests
 
 # Skip coverage for a faster run
-python3 .claude/scripts/test.py --no-coverage
+python3 .claude/scripts/react/test.py --no-coverage
 
 # Exclude files from coverage calculation
-python3 .claude/scripts/test.py --exclude-from-coverage '*View.*' '*/views/*'
+python3 .claude/scripts/react/test.py --exclude-from-coverage '*View.*' '*/views/*'
 ```
 
 ## Output Contract

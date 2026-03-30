@@ -96,19 +96,21 @@ git submodule add https://github.com/swtarmey/claude-code-pipeline.git .claude/p
 # Auto-detect your tech stack
 bash .claude/pipeline/init.sh .
 
-# Or specify explicitly
+# Or specify explicitly (supports multiple --stack flags for multi-stack repos)
 bash .claude/pipeline/init.sh . --stack=swift-ios
 bash .claude/pipeline/init.sh . --stack=react
 bash .claude/pipeline/init.sh . --stack=python
 bash .claude/pipeline/init.sh . --stack=bicep
+bash .claude/pipeline/init.sh . --stack=react --stack=python --stack=bicep
 ```
 
 The init script:
-1. Detects your tech stack from project files (Package.swift, package.json, pyproject.toml, *.bicep, etc.)
+1. Detects all applicable tech stacks from project files (Package.swift, package.json, pyproject.toml, *.bicep, etc.)
    - Also detects Azure SDK usage in dependencies and activates the `azure-sdk` overlay automatically
-2. Creates symlinks: `.claude/agents/` -> pipeline agents, `.claude/skills/` -> pipeline skills, `.claude/scripts/` -> adapter scripts
-3. Writes `.claude/pipeline.config` with your stack and pipeline path
-4. Merges adapter hooks into `.claude/settings.json`
+   - For multi-stack repos, all detected stacks are activated with auto-generated `stack_paths` mappings
+2. Creates symlinks: `.claude/agents/` -> pipeline agents, `.claude/skills/` -> pipeline skills, `.claude/scripts/<stack>/` -> adapter scripts (one per stack)
+3. Writes `.claude/pipeline.config` with stacks, stack_paths, and pipeline path
+4. Merges adapter hooks from all active adapters into `.claude/settings.json`
 5. Generates `.claude/CLAUDE.md` and `.claude/ORCHESTRATOR.md` from templates (if they don't exist)
 
 ### 3. Configure your project
@@ -510,8 +512,8 @@ mkdir -p adapters/your-stack/scripts
 - **Coverage tool:** Your coverage tool
 
 ## Build & Test Commands
-- **Build:** `python3 .claude/scripts/build.py [OPTIONS]`
-- **Test:** `python3 .claude/scripts/test.py [OPTIONS]`
+- **Build:** `python3 .claude/scripts/<stack-name>/build.py [OPTIONS]`
+- **Test:** `python3 .claude/scripts/<stack-name>/test.py [OPTIONS]`
 
 ## Blocked Commands
 - `your-build-cmd` -> use `build-runner` skill
@@ -589,14 +591,21 @@ Contributions welcome for new adapters.
 ### `.claude/pipeline.config`
 
 ```ini
-# Active tech-stack adapter
-stack=react
+# Active tech-stack adapters (comma-separated, first is primary/fallback)
+stacks=react,python
+
+# File-to-stack mapping (glob patterns, comma-separated per stack)
+stack_paths.react=src/frontend/**
+stack_paths.python=src/backend/**
 
 # Absolute path to the pipeline repo
 pipeline_root=/path/to/claude-code-pipeline
 
 # Cross-cutting overlays (comma-separated, empty if none)
 overlays=azure-sdk
+
+# Capabilities aggregated from active adapters and overlays
+capabilities=azure-auth
 
 # Date this config was generated
 initialized=2026-03-29T00:00:00Z

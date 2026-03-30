@@ -69,8 +69,8 @@ Fix every issue found during the code review.
 
 ### Rule 7: Verify Before Delivering
 - Run the verification command from the brief if one is provided
-- To build: invoke the `build-runner` skill, OR run `python3 .claude/scripts/build.py` via Bash
-- To test: invoke the `test-runner` skill, OR run `python3 .claude/scripts/test.py` via Bash
+- To build: invoke the `build-runner` skill, OR run the BUILD COMMAND from the task context brief via Bash (e.g., `python3 .claude/scripts/<stack>/build.py`)
+- To test: invoke the `test-runner` skill, OR run the TEST COMMAND from the task context brief via Bash (e.g., `python3 .claude/scripts/<stack>/test.py`)
 - NEVER run build or test commands directly — use the skills or wrapper scripts above
 - If it doesn't compile/pass linting, fix it before delivering
 - If tests fail, fix the failures and re-run before finishing
@@ -126,7 +126,7 @@ FILES_MODIFIED:
 ### Coverage Gate
 
 After implementation, you MUST:
-1. Run tests via `test-runner` skill or `python3 .claude/scripts/test.py`
+1. Run tests via `test-runner` skill or the TEST COMMAND from the task context brief
 2. Check the `Coverage:` line in the output
 3. If coverage for your modified target is < 90%, write more tests and re-run
 4. Iterate until coverage >= 90% or you have made 3 attempts

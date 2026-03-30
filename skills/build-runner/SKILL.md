@@ -18,8 +18,12 @@ Use this skill **instead of** running build commands directly. Always invoke whe
 ## How to Run
 
 ```bash
-python3 .claude/scripts/build.py [OPTIONS]
+python3 .claude/scripts/<stack>/build.py [OPTIONS]
 ```
+
+Replace `<stack>` with the tech stack being built (e.g., `react`, `python`, `bicep`, `swift-ios`).
+For single-stack projects, there is only one subdirectory. For multi-stack projects, run the
+build script matching the stack of the files you modified.
 
 **Options:**
 | Flag | Default | Description |
@@ -30,14 +34,17 @@ python3 .claude/scripts/build.py [OPTIONS]
 
 **Examples:**
 ```bash
-# Auto-detect project in cwd
-python3 .claude/scripts/build.py
+# Single-stack project
+python3 .claude/scripts/react/build.py
+
+# Multi-stack: build specific stack
+python3 .claude/scripts/python/build.py
 
 # Specific project directory
-python3 .claude/scripts/build.py --project-dir /path/to/project
+python3 .claude/scripts/react/build.py --project-dir /path/to/project
 
 # Specific target/scheme
-python3 .claude/scripts/build.py --scheme MyApp
+python3 .claude/scripts/swift-ios/build.py --scheme MyApp
 ```
 
 ## Output Contract

@@ -1,0 +1,19 @@
+{
+  "name": "react",
+  "display_name": "React / TypeScript",
+  "capabilities": [],
+  "implies_overlays": [],
+  "detection": [
+    { "type": "file_contains", "path": "package.json", "pattern": "\"react\"" }
+  ],
+  "detection_fallback": {
+    "condition": "no_other_stacks_matched_or_tsconfig_exists",
+    "rules": [
+      { "type": "file_exists", "path": "package.json" }
+    ]
+  },
+  "stack_paths": {
+    "directories": ["src/frontend", "frontend", "client", "app"],
+    "fallback_globs": ["**/*.tsx", "**/*.jsx", "**/*.ts", "**/*.js", "package.json", "tsconfig.json"]
+  }
+}

@@ -10,9 +10,9 @@ A tech-stack-agnostic orchestration system for Claude Code that coordinates plan
 
 **Bootstrap into a project:**
 ```bash
-bash init.sh /path/to/project [--stack=swift-ios|react|python|bicep] [--force]
+bash init.sh /path/to/project [--stack=<name>]... [--force]
 ```
-Auto-detects stack from project files (including `.bicep` files for Bicep). Also auto-detects Azure SDK usage and activates the `azure-sdk` overlay when Azure packages are found in dependencies. Creates symlinks and config in the target project's `.claude/` directory.
+Auto-detects all applicable stacks from project files. Supports multiple `--stack` flags for multi-stack repos (e.g., `--stack=react --stack=python --stack=bicep`). Also auto-detects Azure SDK usage and activates the `azure-sdk` overlay when Azure packages are found in dependencies. Creates symlinks and config in the target project's `.claude/` directory.
 
 **Run the pipeline** (from within a bootstrapped project):
 ```
@@ -38,8 +38,8 @@ Reads structured defect reports from GitHub PR comments (see `templates/defect-r
 
 **Build/test** (from within a bootstrapped project):
 ```bash
-python3 .claude/scripts/build.py [OPTIONS]
-python3 .claude/scripts/test.py [OPTIONS]
+python3 .claude/scripts/<stack>/build.py [OPTIONS]
+python3 .claude/scripts/<stack>/test.py [OPTIONS]
 ```
 
 **Pipeline self-tests** (from the pipeline repo root):
@@ -63,7 +63,7 @@ User request → **1a: Analyze & Clarify** (Sonnet) → **1b: Plan** (Opus) → 
 
 2. **Skills** (`skills/`) — Sixteen pipeline steps. `orchestrate` is the master coordinator that invokes the core nine: `architect-analyzer`, `architect-planner`, `build-runner`, `test-runner`, `open-pr`, `summarize-implementation`, `token-analysis`. The standalone `fix-defects` skill reads structured defect reports from PR comments and runs the fix pipeline independently. Seven Azure/Bicep skills provide IaC-specific capabilities: `azure-login` (auth pre-flight), `validate-bicep`, `deploy-bicep`, `azure-cost-estimate`, `security-scan`, `infra-test-runner`, `azure-drift-check`.
 
-3. **Adapters** (`adapters/`) — Pluggable tech-stack modules (swift-ios, react, python, bicep). Each provides: `adapter.md` (metadata), four `*-overlay.md` files (injected into agents), `hooks.json` (blocks raw build/test commands), and `scripts/build.py` + `scripts/test.py` (runner scripts with strict output contracts). Each adapter also provides `implementer-overlay-essential.md` — a compact (~500-800 chars) rules-only variant used for Haiku tasks to improve signal-to-noise ratio.
+3. **Adapters** (`adapters/`) — Pluggable tech-stack modules (swift-ios, react, python, bicep). Multiple adapters can be active simultaneously for multi-stack repos. Each provides: `adapter.md` (metadata), four `*-overlay.md` files (injected into agents), `hooks.json` (blocks raw build/test commands), and `scripts/build.py` + `scripts/test.py` (runner scripts with strict output contracts). Each adapter also provides `implementer-overlay-essential.md` — a compact (~500-800 chars) rules-only variant used for Haiku tasks to improve signal-to-noise ratio.
 
 ### Cross-Cutting Overlays
 
@@ -71,7 +71,16 @@ In addition to adapters, the pipeline supports **cross-cutting overlays** (`over
 
 ### How Adapter Injection Works
 
-The orchestrator reads `.claude/pipeline.config` → loads `adapters/<stack>/adapter.md` → for each agent launch, reads the generic agent + the relevant overlay → inserts overlay at the `<!-- ADAPTER:TECH_STACK_CONTEXT -->` marker → passes composed prompt to the Agent tool. If cross-cutting overlays are configured, their content is appended after the adapter overlay at the same marker. For Haiku implementer tasks, the essential overlay variant is used instead of the full overlay.
+The orchestrator reads `.claude/pipeline.config` → loads all adapters from the `stacks` list into a **STACK_REGISTRY** → resolves each task's stack from its file paths via `stack_paths.*` patterns → injects the appropriate overlay(s) at the `<!-- ADAPTER:TECH_STACK_CONTEXT -->` marker.
+
+**Injection strategy by agent role:**
+- **Architect agents** (1a, 1b, blast-radius): receive ALL stacks' overlays so they can design cross-stack interactions
+- **Implementer agents** (2, 2.2, 3.5): receive ONLY the task's stack overlay (resolved from file paths)
+- **Reviewer agents** (2.1, 3.5): receive the union of stacks present in the current wave's tasks
+
+If cross-cutting overlays are configured, their content is appended after the stack adapter overlay(s) at the same marker. For Haiku implementer tasks, the essential overlay variant is used instead of the full overlay.
+
+Conditional pipeline behavior (e.g., Azure authentication pre-flight) is driven by **capabilities** aggregated from adapter and overlay `manifest.json` files, not by checking stack names. This means adding a new adapter that declares `"capabilities": ["azure-auth"]` automatically triggers Azure auth without editing any skills.
 
 ### Model Assignment Strategy
 
@@ -99,8 +108,12 @@ Agents communicate via structured output: implementer outputs `SUCCESS`/`FAILURE
 
 ## Writing a New Adapter
 
-Create `adapters/<stack-name>/` with these 9 files: `adapter.md`, `architect-overlay.md`, `implementer-overlay.md`, `implementer-overlay-essential.md`, `reviewer-overlay.md`, `test-overlay.md`, `hooks.json`, `scripts/build.py`, `scripts/test.py`. The essential overlay is the compact Haiku variant (~500-800 chars, rules only, no examples). Follow existing adapters as reference. Build script must output `BUILD SUCCEEDED | N warning(s)` or `BUILD FAILED | ...`; test script must output `Summary: Total: N, Passed: N, Failed: N | Coverage: X.X%`.
+Create `adapters/<stack-name>/` with these 10 files: `manifest.json`, `adapter.md`, `architect-overlay.md`, `implementer-overlay.md`, `implementer-overlay-essential.md`, `reviewer-overlay.md`, `test-overlay.md`, `hooks.json`, `scripts/build.py`, `scripts/test.py`.
+
+The `manifest.json` is the machine-readable adapter descriptor — it declares detection rules (how `init.sh` auto-detects this stack from project files), `stack_paths` (default glob patterns for file-to-stack mapping), `capabilities` (e.g., `["azure-auth"]` for stacks that require Azure CLI), and `implies_overlays` (e.g., `["azure-sdk"]`). See existing adapters for the schema. **No edits to `init.sh`, skills, or tests are needed when adding a new adapter** — the system discovers adapters from their `manifest.json` files.
+
+The essential overlay is the compact Haiku variant (~500-800 chars, rules only, no examples). Follow existing adapters as reference. Build script must output `BUILD SUCCEEDED | N warning(s)` or `BUILD FAILED | ...`; test script must output `Summary: Total: N, Passed: N, Failed: N | Coverage: X.X%`.
 
 ## Project Files Generated by init.sh
 
-In the target project's `.claude/`: symlinks to `agents/`, `skills/`, `scripts/`; optionally `overlays/` (when Azure SDK detected); `pipeline.config` (stack + pipeline path + overlays); merged `settings.json` (PreToolUse hooks from adapter); `CLAUDE.md` and `ORCHESTRATOR.md` from templates; `tmp/` for recovery artifacts.
+In the target project's `.claude/`: symlinks to `agents/`, `skills/`, `scripts/<stack>/` (one per active stack); optionally `overlays/` (when Azure SDK detected); `pipeline.config` (stacks + stack_paths + capabilities + pipeline path + overlays); merged `settings.json` (PreToolUse hooks from all active adapters); `CLAUDE.md` and `ORCHESTRATOR.md` from templates; `tmp/` for recovery artifacts.

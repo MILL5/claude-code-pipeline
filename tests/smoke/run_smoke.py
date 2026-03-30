@@ -112,10 +112,10 @@ def validate_bootstrap(project_dir: Path, result: SmokeResult) -> None:
     config_path = claude_dir / "pipeline.config"
     if config_path.exists():
         content = config_path.read_text()
-        if "stack=python" in content:
-            result.ok("pipeline.config has stack=python")
+        if "stacks=python" in content:
+            result.ok("pipeline.config has stacks=python")
         else:
-            result.fail("pipeline.config has stack=python", content[:200])
+            result.fail("pipeline.config has stacks=python", content[:200])
         if "pipeline_root=" in content:
             result.ok("pipeline.config has pipeline_root")
         else:
@@ -123,13 +123,12 @@ def validate_bootstrap(project_dir: Path, result: SmokeResult) -> None:
     else:
         result.fail("pipeline.config exists")
 
-    # Symlinks
-    symlinks = {
+    # Symlinks (agents and skills are direct symlinks, scripts is a directory with per-stack symlinks)
+    direct_symlinks = {
         "agents": PIPELINE_ROOT / "agents",
         "skills": PIPELINE_ROOT / "skills",
-        "scripts": PIPELINE_ROOT / "adapters" / "python" / "scripts",
     }
-    for name, expected_target in symlinks.items():
+    for name, expected_target in direct_symlinks.items():
         link_path = claude_dir / name
         if link_path.is_symlink():
             actual_target = link_path.resolve()
@@ -142,6 +141,26 @@ def validate_bootstrap(project_dir: Path, result: SmokeResult) -> None:
             result.ok(f"{name}/ directory exists (may be copy instead of symlink)")
         else:
             result.fail(f"Symlink {name}/ exists")
+
+    # Per-stack scripts symlink (scripts/python/ -> adapters/python/scripts/)
+    scripts_dir = claude_dir / "scripts"
+    if scripts_dir.is_dir():
+        result.ok("scripts/ directory exists")
+        stack_scripts = scripts_dir / "python"
+        expected_scripts = PIPELINE_ROOT / "adapters" / "python" / "scripts"
+        if stack_scripts.is_symlink():
+            actual_target = stack_scripts.resolve()
+            if actual_target == expected_scripts.resolve():
+                result.ok("Symlink scripts/python/ -> correct target")
+            else:
+                result.fail("Symlink scripts/python/ -> correct target",
+                            f"expected {expected_scripts}, got {actual_target}")
+        elif stack_scripts.is_dir():
+            result.ok("scripts/python/ directory exists (may be copy instead of symlink)")
+        else:
+            result.fail("Symlink scripts/python/ exists")
+    else:
+        result.fail("scripts/ directory exists")
 
     # Generated files
     for gen_file in ["CLAUDE.md", "ORCHESTRATOR.md"]:

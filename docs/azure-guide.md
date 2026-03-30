@@ -43,9 +43,11 @@ bash .claude/pipeline/init.sh . --stack=bicep     # Use Bicep adapter explicitly
 Check `.claude/pipeline.config`:
 
 ```ini
-stack=bicep
+stacks=bicep
+stack_paths.bicep=infra/**
 pipeline_root=/path/to/claude-code-pipeline
 overlays=azure-sdk
+capabilities=azure-auth
 initialized=2026-03-29T12:00:00Z
 ```
 
@@ -168,7 +170,7 @@ The Bicep adapter teaches the pipeline's 4 generic agents about Infrastructure a
 
 ### Build Script
 
-`python3 .claude/scripts/build.py` runs:
+`python3 .claude/scripts/bicep/build.py` runs:
 
 1. **`bicep lint`** (via `az bicep lint` or `bicep build` with `bicepconfig.json` rules)
 2. **`bicep build`** (compiles each `.bicep` to ARM JSON)
@@ -188,7 +190,7 @@ main.bicep                18  [BCP035] missing required property "location"
 
 ### Test Script
 
-`python3 .claude/scripts/test.py` auto-detects and runs available frameworks:
+`python3 .claude/scripts/bicep/test.py` auto-detects and runs available frameworks:
 
 | Framework | Detection | What it tests |
 |-----------|----------|--------------|

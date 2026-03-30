@@ -11,8 +11,8 @@
 
 ## Build & Test Commands
 
-- **Build:** `python3 .claude/scripts/build.py [--project-dir .] [--scheme <name>]`
-- **Test:** `python3 .claude/scripts/test.py [--project-dir .] [--scheme <name>] [--no-coverage] [--exclude-from-coverage '<pattern>']`
+- **Build:** `python3 .claude/scripts/swift-ios/build.py [--project-dir .] [--scheme <name>]`
+- **Test:** `python3 .claude/scripts/swift-ios/test.py [--project-dir .] [--scheme <name>] [--no-coverage] [--exclude-from-coverage '<pattern>']`
 
 ## Blocked Commands
 

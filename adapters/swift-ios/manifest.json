@@ -1,0 +1,15 @@
+{
+  "name": "swift-ios",
+  "display_name": "Swift / iOS (Xcode)",
+  "capabilities": [],
+  "implies_overlays": [],
+  "detection": [
+    { "type": "file_glob", "pattern": "*.xcodeproj" },
+    { "type": "file_glob", "pattern": "*.xcworkspace" },
+    { "type": "file_exists", "path": "Package.swift" }
+  ],
+  "stack_paths": {
+    "directories": [],
+    "fallback_globs": ["**/*.swift", "**/*.xib", "**/*.storyboard", "Package.swift"]
+  }
+}

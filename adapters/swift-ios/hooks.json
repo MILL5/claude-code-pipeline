@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "CMD=$(jq -r '.tool_input.command'); FIRST=$(echo \"$CMD\" | head -1 | sed 's/^[[:space:]]*//' | awk '{print $1}'); case \"$FIRST\" in xcodebuild|swiftc) echo '{\"decision\":\"block\",\"reason\":\"BLOCKED: Use the build-runner or test-runner skill instead. Subagents: python3 .claude/scripts/build.py or python3 .claude/scripts/test.py.\"}' ;; swift) echo \"$CMD\" | head -1 | grep -qE '^[[:space:]]*swift (build|test)' && echo '{\"decision\":\"block\",\"reason\":\"BLOCKED: Use the build-runner or test-runner skill instead. Subagents: python3 .claude/scripts/build.py or python3 .claude/scripts/test.py.\"}' || echo '{}' ;; *) echo '{}' ;; esac",
+            "command": "CMD=$(jq -r '.tool_input.command'); FIRST=$(echo \"$CMD\" | head -1 | sed 's/^[[:space:]]*//' | awk '{print $1}'); case \"$FIRST\" in xcodebuild|swiftc) echo '{\"decision\":\"block\",\"reason\":\"BLOCKED: Use the build-runner or test-runner skill instead. Subagents: python3 .claude/scripts/swift-ios/build.py or python3 .claude/scripts/swift-ios/test.py.\"}' ;; swift) echo \"$CMD\" | head -1 | grep -qE '^[[:space:]]*swift (build|test)' && echo '{\"decision\":\"block\",\"reason\":\"BLOCKED: Use the build-runner or test-runner skill instead. Subagents: python3 .claude/scripts/swift-ios/build.py or python3 .claude/scripts/swift-ios/test.py.\"}' || echo '{}' ;; *) echo '{}' ;; esac",
             "timeout": 5,
             "statusMessage": "Checking for forbidden build/test commands..."
           },

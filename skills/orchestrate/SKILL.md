@@ -20,30 +20,67 @@ Before starting, read these files (skip if already in context from this session)
 1. `.claude/ORCHESTRATOR.md` — architecture, conventions, fragile areas
 2. `.claude/CLAUDE.md` — project rules (file limits, mandatory skills, etc.)
 
-## Step 0: Load Adapter
+## Step 0: Load Adapters
 
-Before any agent launches, determine the active tech-stack adapter:
+Before any agent launches, determine the active tech-stack adapters:
 
-1. Read `.claude/pipeline.config` to get the `stack`, `pipeline_root`, and `overlays` values
-2. Read `<pipeline_root>/adapters/<stack>/adapter.md` — this is the **adapter config**
-3. For each agent you launch, read the relevant overlay file from `<pipeline_root>/adapters/<stack>/`:
-   - `architect-overlay.md` — injected into architect-agent prompts
-   - `implementer-overlay.md` — injected into implementer-agent prompts
-   - `reviewer-overlay.md` — injected into code-reviewer-agent prompts
-   - `test-overlay.md` — injected into test-architect-agent prompts
+1. Read `.claude/pipeline.config` to get `stacks`, `pipeline_root`, `overlays`, `stack_paths.*`, and `capabilities` values
+2. Parse the `stacks` value (comma-separated) into a list. The first stack is the **primary** (fallback).
+   - **Backward compatibility:** If the config has `stack` (singular) instead of `stacks`, treat it as a single-element list.
+3. Parse the `capabilities` value (comma-separated) into **ACTIVE_CAPABILITIES** — a set of capability
+   strings (e.g., `azure-auth`). These are aggregated from adapter and overlay `manifest.json` files
+   by `init.sh` and written to the config. Use these for conditional behavior instead of checking
+   stack names. If `capabilities` is missing from the config, read each adapter's and overlay's
+   `manifest.json` directly to build the set.
+4. For each stack in the list, read `<pipeline_root>/adapters/<stack>/adapter.md` — this is that stack's **adapter config**
+5. Build the **STACK_REGISTRY** — a mapping from stack name to its overlays:
+   ```
+   STACK_REGISTRY = {
+     "<stack1>": { adapter: <adapter.md>, architect: <architect-overlay.md>, implementer: <implementer-overlay.md>, implementer_essential: <implementer-overlay-essential.md>, reviewer: <reviewer-overlay.md>, test: <test-overlay.md> },
+     "<stack2>": { ... },
+     ...
+   }
+   ```
+6. Parse the `stack_paths.*` entries into a **STACK_PATHS** mapping:
+   ```
+   STACK_PATHS = {
+     "<stack1>": ["glob1", "glob2", ...],
+     "<stack2>": ["glob3", "glob4", ...],
+   }
+   ```
 
 When composing agent prompts, insert the overlay content at the `<!-- ADAPTER:TECH_STACK_CONTEXT -->`
 and `<!-- ADAPTER:CODE_QUALITY_RULES -->` markers in the agent's prompt. If you are pasting the
 prompt directly (not relying on the agent definition), include the overlay content inline.
 
-The adapter config also declares:
-- **Build command**: The command agents should use to build (e.g., `python3 .claude/scripts/build.py`)
-- **Test command**: The command agents should use to test (e.g., `python3 .claude/scripts/test.py`)
+**Overlay injection strategy by agent role:**
+
+| Agent Role | Which stacks' overlays to inject |
+|------------|----------------------------------|
+| Architect (1a, 1b) | **ALL stacks** — the architect must see the full system to design cross-stack interactions |
+| Implementer (2, 2.2, 3.5) | **Task's stack only** — resolved from the task's file paths via STACK_PATHS |
+| Reviewer (2.1, 3.5) | **Wave's active stacks** — union of stacks for all tasks in the current wave |
+| Test architect | **Task's stack only** |
+
+**Stack resolution algorithm** (used by implementer, reviewer, and bug-fix steps):
+
+```
+resolve_stack(file_path):
+    for each stack in stacks (in config order):
+        for each pattern in STACK_PATHS[stack]:
+            if file_path matches pattern:
+                return stack
+    return stacks[0]  # fallback to primary stack
+```
+
+Each adapter config declares:
+- **Build command**: `python3 .claude/scripts/<stack>/build.py`
+- **Test command**: `python3 .claude/scripts/<stack>/test.py`
 - **Blocked commands**: Raw commands that hooks prevent (for awareness)
 
 ## Step 0.1: Load Cross-Cutting Overlays
 
-After loading the adapter, check `pipeline.config` for the `overlays` key:
+After loading adapters, check `pipeline.config` for the `overlays` key:
 
 1. Read the `overlays` value (comma-separated). If empty or missing, skip this step.
 2. For each overlay name (e.g., `azure-sdk`):
@@ -52,11 +89,12 @@ After loading the adapter, check `pipeline.config` for the `overlays` key:
    - Read `<pipeline_root>/overlays/<overlay_name>/implementer-overlay-essential.md`
    - Read `<pipeline_root>/overlays/<overlay_name>/reviewer-overlay.md`
 
-3. When composing agent prompts, **append** the overlay content AFTER the adapter overlay
-   at the same `<!-- ADAPTER:TECH_STACK_CONTEXT -->` marker. Use this format:
+3. When composing agent prompts, **append** the cross-cutting overlay content AFTER the
+   stack adapter overlay(s) at the same `<!-- ADAPTER:TECH_STACK_CONTEXT -->` marker.
+   Use this format:
 
    ```
-   <adapter overlay content>
+   <stack adapter overlay content>
 
    ---
    ## Cross-Cutting: Azure SDK Context
@@ -72,11 +110,11 @@ After loading the adapter, check `pipeline.config` for the `overlays` key:
 
 ## Step 0.2: Azure Authentication Pre-Flight
 
-**When to run:** If `stack=bicep` OR `overlays` contains `azure-sdk`, AND the pipeline will
+**When to run:** If `ACTIVE_CAPABILITIES` includes `azure-auth`, AND the pipeline will
 perform Azure-dependent operations (what-if, deploy, drift-check, infra-test).
 
-**Skip if:** The pipeline only involves local operations (bicep build/lint, PSRule, security scan,
-cost estimate). Build and review steps do NOT require Azure auth.
+**Skip if:** The pipeline only involves local operations (build, lint, scan, cost estimate).
+Build and review steps do NOT require Azure auth.
 
 **How to run:** Invoke the `azure-login` skill. It will:
 
@@ -246,7 +284,16 @@ Prompt: |
   Do NOT enter plan mode — you will need to write the enriched spec file.
 
   TECH STACK CONTEXT:
-  <paste contents of adapter's architect-overlay.md>
+  <for each stack in STACK_REGISTRY, paste its architect-overlay.md under a
+   "## <Stack> Architecture Context" header>
+
+  <append cross-cutting overlays under "## Cross-Cutting: <name> Context" headers>
+
+  STACK MAPPING (for awareness during analysis):
+  <for each stack, list its stack_paths patterns, e.g.:
+   - react: src/frontend/**
+   - python: src/backend/**
+   - bicep: infra/**>
 
   USER REQUEST:
   "<user's request verbatim>"
@@ -283,7 +330,16 @@ Prompt: |
   Read `.claude/skills/architect-planner/SKILL.md` for your instructions.
 
   TECH STACK CONTEXT:
-  <paste contents of adapter's architect-overlay.md>
+  <for each stack in STACK_REGISTRY, paste its architect-overlay.md under a
+   "## <Stack> Architecture Context" header>
+
+  <append cross-cutting overlays under "## Cross-Cutting: <name> Context" headers>
+
+  STACK MAPPING (for task assignment — assign each task a stack based on its files):
+  <for each stack, list its stack_paths patterns, e.g.:
+   - react: src/frontend/**
+   - python: src/backend/**
+   - bicep: infra/**>
 
   ENRICHED SPEC:
   <paste full contents of .claude/tmp/1a-spec.md>
@@ -334,6 +390,12 @@ Tasks across waves are sequential (wave N+1 waits for wave N to complete).
 
 For each task in the current wave:
 
+1. Read the task's `Stack:` field from the plan to determine `<task_stack>`.
+   If the plan omits the stack field, resolve it from the task's file paths using the
+   `resolve_stack()` algorithm from Step 0.
+2. Look up `<task_stack>` in the STACK_REGISTRY to get the correct overlay.
+3. Compose the prompt:
+
 ```
 Agent: implementer-agent
 Model: <model from plan — haiku, sonnet, or opus>
@@ -344,9 +406,14 @@ Prompt: |
   commands, coverage gate, self-review). No deviations.
 
   TECH STACK RULES:
-  <select overlay by model assignment:
-    - Haiku tasks: paste adapters/<stack>/implementer-overlay-essential.md
-    - Sonnet/Opus tasks: paste adapters/<stack>/implementer-overlay.md (full)>
+  <select overlay by model assignment from STACK_REGISTRY[<task_stack>]:
+    - Haiku tasks: paste implementer_essential overlay
+    - Sonnet/Opus tasks: paste implementer overlay (full)>
+
+  <append cross-cutting overlays (essential or full, matching model)>
+
+  BUILD COMMAND: python3 .claude/scripts/<task_stack>/build.py
+  TEST COMMAND: python3 .claude/scripts/<task_stack>/test.py
 
   TASK CONTEXT BRIEF:
 
@@ -357,6 +424,9 @@ Prompt: |
 to maximize signal-to-noise ratio. The reviewer in Step 2.1 has the full overlay and will catch
 any violations. Sonnet/Opus tasks receive the full overlay since they handle complex tasks where
 examples and patterns are valuable.
+
+**Stack scoping rationale:** The implementer only needs rules for the stack it is working in.
+Loading all stacks' overlays would dilute Haiku's signal-to-noise ratio and waste tokens.
 
 **After each implementer returns:**
 
@@ -370,7 +440,8 @@ examples and patterns are valuable.
 To reduce repeated context, reuse a single code-reviewer agent within each wave via
 **SendMessage** instead of launching a fresh agent per task.
 
-**First review in a wave** — launch a new code-reviewer agent:
+**First review in a wave** — determine which stacks appear in the wave's tasks, then
+launch a new code-reviewer agent with those stacks' reviewer overlays:
 
 ```
 Agent: code-reviewer-agent
@@ -385,7 +456,11 @@ Prompt: |
   ONLY the new changes presented.
 
   TECH STACK REVIEW RULES:
-  <paste contents of adapter's reviewer-overlay.md>
+  <for each unique stack in this wave's tasks, paste its reviewer-overlay.md
+   under a "## <Stack> Review Rules" header. Apply only the rules matching the
+   tech stack of the files under review.>
+
+  <append cross-cutting overlays under "## Cross-Cutting: <name> Review Rules" headers>
 
   REVIEW THESE CHANGES:
 
@@ -427,7 +502,12 @@ Prompt: |
   Follow your standard output protocol (SUCCESS/FAILURE).
 
   TECH STACK RULES:
-  <paste contents of adapter's implementer-overlay.md>
+  <paste STACK_REGISTRY[<task_stack>].implementer overlay (full — fixes always get full overlay)>
+
+  <append cross-cutting overlays>
+
+  BUILD COMMAND: python3 .claude/scripts/<task_stack>/build.py
+  TEST COMMAND: python3 .claude/scripts/<task_stack>/test.py
 
   CODE REVIEW FINDINGS TO FIX:
 
@@ -502,7 +582,10 @@ Prompt: |
   Do NOT enter plan mode — you may need to read code files.
 
   TECH STACK CONTEXT:
-  <paste contents of adapter's architect-overlay.md>
+  <for each stack in STACK_REGISTRY, paste its architect-overlay.md under a
+   "## <Stack> Architecture Context" header>
+
+  <append cross-cutting overlays>
 
   A bug was found during manual testing of a feature implementation. Assess the
   blast radius of fixing this bug and recommend a fix approach.
@@ -547,7 +630,13 @@ Prompt: |
   Test baseline: BASELINE_COUNT passing tests.
 
   TECH STACK RULES:
-  <paste contents of adapter's implementer-overlay.md>
+  <resolve stack from affected files using resolve_stack(), then paste
+   STACK_REGISTRY[<resolved_stack>].implementer overlay (full)>
+
+  <append cross-cutting overlays>
+
+  BUILD COMMAND: python3 .claude/scripts/<resolved_stack>/build.py
+  TEST COMMAND: python3 .claude/scripts/<resolved_stack>/test.py
 
   BUG REPORT:
   "<user's bug report>"
@@ -573,7 +662,11 @@ Prompt: |
   Use your Pipeline Mode output protocol (PASS/FAIL).
 
   TECH STACK REVIEW RULES:
-  <paste contents of adapter's reviewer-overlay.md>
+  <resolve stack from affected files, then paste
+   STACK_REGISTRY[<resolved_stack>].reviewer overlay under
+   "## <Stack> Review Rules" header>
+
+  <append cross-cutting overlays>
 
   This is a BUG FIX review. In addition to your standard checks, explicitly verify:
   - The fix does not revert or contradict the original implementation's intent
@@ -683,7 +776,7 @@ Prompt: |
   - Plan file: .claude/tmp/1b-plan.md (read for planned vs actual model assignments)
   - Pipeline repo: <owner/repo>
   - Pipeline root: <pipeline_root>
-  - Target project stack: <stack>
+  - Target project stacks: <stacks (comma-separated)>
   - Pipeline duration: <PIPELINE_START> to <PIPELINE_END>
 ```
 

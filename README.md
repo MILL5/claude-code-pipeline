@@ -100,10 +100,12 @@ bash .claude/pipeline/init.sh .
 bash .claude/pipeline/init.sh . --stack=swift-ios
 bash .claude/pipeline/init.sh . --stack=react
 bash .claude/pipeline/init.sh . --stack=python
+bash .claude/pipeline/init.sh . --stack=bicep
 ```
 
 The init script:
-1. Detects your tech stack from project files (Package.swift, package.json, pyproject.toml, etc.)
+1. Detects your tech stack from project files (Package.swift, package.json, pyproject.toml, *.bicep, etc.)
+   - Also detects Azure SDK usage in dependencies and activates the `azure-sdk` overlay automatically
 2. Creates symlinks: `.claude/agents/` -> pipeline agents, `.claude/skills/` -> pipeline skills, `.claude/scripts/` -> adapter scripts
 3. Writes `.claude/pipeline.config` with your stack and pipeline path
 4. Merges adapter hooks into `.claude/settings.json`
@@ -139,6 +141,9 @@ Then use any of these to trigger the pipeline:
 | `swift-ios` | `*.xcodeproj`, `*.xcworkspace`, `Package.swift` | Xcode / Swift PM | XCTest | xccov |
 | `react` | `package.json` with `react` dependency | npm/yarn/pnpm/bun + tsc | Jest / Vitest | istanbul / v8 |
 | `python` | `pyproject.toml`, `setup.py`, `requirements.txt` | mypy + ruff | pytest | pytest-cov |
+| `bicep` | `*.bicep`, `bicepconfig.json` | bicep build + az bicep lint | ARM-TTK / PSRule / what-if | Resource validation coverage |
+
+**Deploying to Azure?** See the **[Azure Deployment Guide](docs/azure-guide.md)** for Bicep adapter setup, Azure SDK overlay, authentication, and the 7 Azure-specific skills.
 
 ### What Each Adapter Provides
 
@@ -184,6 +189,13 @@ Agents are **generic** — they contain no tech-stack-specific knowledge. Stack 
 | `summarize-implementation` | After implementation tasks | Generates conventional-commit messages |
 | `token-analysis` | Step 5 (via orchestrator, mandatory) | Analyzes pipeline token usage, files GitHub issues for optimization findings |
 | `fix-defects` | `/fix-defects`, "fix defects", "fix PR defects" | Reads defect reports from PR comments, triages by severity, runs fix pipeline |
+| `azure-login` | `/azure-login`, auto before Azure-dependent steps | Validates Azure auth, subscription context, RBAC permissions |
+| `validate-bicep` | `/validate-bicep` | Bicep lint + build + optional what-if dry run |
+| `deploy-bicep` | `/deploy-bicep` | Deploy Bicep to Azure with mandatory confirmation gate |
+| `azure-cost-estimate` | `/azure-cost-estimate` | Estimate monthly Azure costs from Bicep templates |
+| `security-scan` | `/security-scan` | PSRule/Checkov security and compliance scanning |
+| `infra-test-runner` | `/infra-test-runner` | ARM-TTK/Pester infrastructure validation tests |
+| `azure-drift-check` | `/azure-drift-check` | Detect config drift between templates and deployed state |
 
 ### Adapter Injection Flow
 
@@ -253,7 +265,14 @@ claude-code-pipeline/
 |   |-- open-pr/SKILL.md                 # Branch + draft PR creation
 |   |-- summarize-implementation/SKILL.md # Conventional commit messages
 |   |-- token-analysis/SKILL.md          # Step 5: token usage analysis + issue filing
-|   +-- fix-defects/SKILL.md             # Standalone: fix defects from PR comments
+|   |-- fix-defects/SKILL.md             # Standalone: fix defects from PR comments
+|   |-- azure-login/SKILL.md             # Azure auth pre-flight validation
+|   |-- validate-bicep/SKILL.md          # Bicep lint + build + what-if
+|   |-- deploy-bicep/SKILL.md            # Deploy with confirmation gate
+|   |-- azure-cost-estimate/SKILL.md     # Monthly cost estimation
+|   |-- security-scan/SKILL.md           # PSRule/Checkov security scanning
+|   |-- infra-test-runner/SKILL.md       # ARM-TTK/Pester infrastructure tests
+|   +-- azure-drift-check/SKILL.md       # Configuration drift detection
 |
 |-- adapters/
 |   |-- swift-ios/                       # Apple ecosystem adapter
@@ -280,17 +299,36 @@ claude-code-pipeline/
 |   |       |-- build.py                 # tsc + build script runner
 |   |       +-- test.py                  # Jest/Vitest runner with coverage
 |   |
-|   +-- python/                          # Python adapter
-|       |-- adapter.md                   # pip/poetry/uv, pytest, mypy/ruff
-|       |-- architect-overlay.md         # Module decomposition, async, Django/FastAPI
-|       |-- implementer-overlay.md       # Type hints, dataclasses, PEP conventions
+|   |-- python/                          # Python adapter
+|   |   |-- adapter.md                   # pip/poetry/uv, pytest, mypy/ruff
+|   |   |-- architect-overlay.md         # Module decomposition, async, Django/FastAPI
+|   |   |-- implementer-overlay.md       # Type hints, dataclasses, PEP conventions
+|   |   |-- implementer-overlay-essential.md  # Compact rules-only variant for Haiku
+|   |   |-- reviewer-overlay.md          # GIL, security, resource management
+|   |   |-- test-overlay.md              # pytest fixtures, parametrize, async
+|   |   |-- hooks.json                   # Block pytest, mypy directly
+|   |   +-- scripts/
+|   |       |-- build.py                 # mypy + ruff runner
+|   |       +-- test.py                  # pytest runner with coverage
+|   |
+|   +-- bicep/                           # Azure Bicep (IaC) adapter
+|       |-- adapter.md                   # bicep CLI, ARM-TTK, PSRule, auth docs
+|       |-- architect-overlay.md         # Module decomposition, scope hierarchy
+|       |-- implementer-overlay.md       # Naming, decorators, security, modules
 |       |-- implementer-overlay-essential.md  # Compact rules-only variant for Haiku
-|       |-- reviewer-overlay.md          # GIL, security, resource management
-|       |-- test-overlay.md              # pytest fixtures, parametrize, async
-|       |-- hooks.json                   # Block pytest, mypy directly
+|       |-- reviewer-overlay.md          # Security, cost, reliability (8 categories)
+|       |-- test-overlay.md              # ARM-TTK, PSRule, what-if, Pester patterns
+|       |-- hooks.json                   # Block bicep/az deployment/PSRule
 |       +-- scripts/
-|           |-- build.py                 # mypy + ruff runner
-|           +-- test.py                  # pytest runner with coverage
+|           |-- build.py                 # bicep build + lint runner
+|           +-- test.py                  # ARM-TTK/PSRule/what-if runner
+|
+|-- overlays/                            # Cross-cutting overlays (stack-agnostic)
+|   +-- azure-sdk/                       # Azure SDK best practices overlay
+|       |-- architect-overlay.md         # Service patterns, managed identity, multi-region
+|       |-- implementer-overlay.md       # DefaultAzureCredential, retry, Key Vault
+|       |-- implementer-overlay-essential.md  # Compact rules-only variant for Haiku
+|       +-- reviewer-overlay.md          # Auth, resilience, lifecycle, security, cost
 |
 |-- tests/                               # Pipeline self-tests (4 layers)
 |   |-- validate_structure.py            # Layer 1: structural integrity (147 checks)
@@ -310,12 +348,23 @@ claude-code-pipeline/
 |   |   |-- defect-report-high.txt       # HIGH severity defect report
 |   |   |-- defect-report-medium.txt     # MEDIUM severity defect report
 |   |   |-- defect-report-invalid.txt    # Invalid defect report (missing fields)
-|   |   +-- defect-report-not-a-report.txt # Non-defect PR comment
+|   |   |-- defect-report-not-a-report.txt # Non-defect PR comment
+|   |   |-- bicep-build-success.txt      # Bicep BUILD SUCCEEDED output
+|   |   |-- bicep-build-failure.txt      # Bicep BUILD FAILED output
+|   |   |-- bicep-test-success.txt       # Bicep test Summary output
+|   |   |-- bicep-test-failure.txt       # Bicep test with failures
+|   |   |-- azure-auth-ok.txt            # AZURE AUTH OK output
+|   |   |-- azure-auth-failed.txt        # AZURE AUTH FAILED output
+|   |   |-- cost-estimate.txt            # COST ESTIMATE output
+|   |   |-- security-scan-findings.txt   # SECURITY SCAN output
+|   |   |-- drift-check-drifted.txt      # DRIFT CHECK output
+|   |   +-- deploy-success.txt           # DEPLOY SUCCEEDED output
 |   +-- smoke/                           # Layer 4: end-to-end smoke test
 |       |-- run_smoke.py                 # Bootstrap + validate + optional full run
 |       +-- calculator/                  # Minimal Python fixture project
 |
 |-- docs/                                # Guides and documentation
+|   |-- azure-guide.md                  # Azure deployment guide (Bicep, SDK, auth, skills)
 |   +-- testing-guide.md                # Manual testing & defect reporting guide
 |
 +-- templates/                           # Project file templates
@@ -354,6 +403,15 @@ You don't have to use the full pipeline. Individual skills work standalone:
 /open-pr                         # Create a branch + draft PR
 /summarize-implementation        # Generate a commit message from current diff
 /fix-defects                     # Fix defects reported on a PR
+
+# Azure skills (see docs/azure-guide.md for details)
+/azure-login                     # Verify Azure auth and subscription context
+/validate-bicep                  # Lint + build + what-if dry run
+/deploy-bicep                    # Deploy with confirmation gate
+/azure-cost-estimate             # Estimate monthly Azure costs
+/security-scan                   # PSRule/Checkov security scan
+/infra-test-runner               # ARM-TTK/Pester infrastructure tests
+/azure-drift-check               # Detect config drift vs deployed state
 ```
 
 ### Updating the Pipeline
@@ -537,6 +595,9 @@ stack=react
 # Absolute path to the pipeline repo
 pipeline_root=/path/to/claude-code-pipeline
 
+# Cross-cutting overlays (comma-separated, empty if none)
+overlays=azure-sdk
+
 # Date this config was generated
 initialized=2026-03-29T00:00:00Z
 ```
@@ -625,6 +686,7 @@ When writing a custom adapter, run `python3 tests/validate_structure.py` after c
   - **swift-ios**: Xcode 15+, `xcrun`, iOS/watchOS simulators
   - **react**: Node.js 18+, npm/yarn/pnpm/bun
   - **python**: Python 3.9+, pip/poetry/uv
+  - **bicep**: Azure CLI (`az`) + Bicep CLI, optionally PowerShell 7+ (`pwsh`) for PSRule/ARM-TTK
 
 ## FAQ
 

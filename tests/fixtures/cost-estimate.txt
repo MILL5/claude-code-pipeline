@@ -1,0 +1,16 @@
+Parsing Bicep templates...
+Compiling main.bicep to ARM JSON...
+Extracting resources and SKUs...
+Querying Azure Retail Pricing API...
+
+COST ESTIMATE | Total: $284.50/month
+
+Resource                   Type                                SKU          Region        Est. Monthly
+────────────────────────────────────────────────────────────────────────────────────────────────────────
+myStorageAccount           Microsoft.Storage/storageAccounts   Standard_LRS eastus        $21.00
+myAppServicePlan           Microsoft.Web/serverfarms           P1v3         eastus        $138.00
+myKeyVault                 Microsoft.KeyVault/vaults           Standard     eastus        $0.50
+myCosmosDb                 Microsoft.DocumentDB/databaseAccts  Standard     eastus        $25.00-$500.00*
+myLogAnalytics             Microsoft.OperationalInsights/ws    PerGB2018    eastus        $100.00
+
+* Consumption-based resources show estimate ranges based on typical usage tiers.

@@ -1,0 +1,24 @@
+Building in: /home/user/infra
+Bicep files: 3
+Config:      bicepconfig.json found
+
+--- Running: bicep lint ---
+Running: bicep lint main.bicep
+Running: bicep lint modules/storage.bicep
+Running: bicep lint modules/compute.bicep
+
+--- Running: bicep build ---
+Running: bicep build main.bicep
+Running: bicep build modules/storage.bicep
+Running: bicep build modules/compute.bicep
+
+File                  Ln  Error
+-------------------------------------------------------
+main.bicep            18  [BCP035] The specified "resource" declaration is missing the required property "location"
+modules/compute.bicep 7   [BCP036] The property "sku" expected a value of type "string" but got "int"
+
+File                      Ln  Warning
+-------------------------------------------------------
+modules/storage.bicep     12  [no-unused-params] Parameter 'legacySku' is declared but never used
+
+BUILD FAILED  |  2 error(s)  |  1 warning(s)

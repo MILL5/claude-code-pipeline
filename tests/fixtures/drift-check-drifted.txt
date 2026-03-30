@@ -1,0 +1,13 @@
+Running drift check against resource group 'rg-production'...
+Template: main.bicep
+Running: az deployment group what-if
+
+DRIFT CHECK | Total: 5 resources | Drifted: 2, Compliant: 2, Missing: 1
+
+Resource                   Property                    Expected              Actual                 Status
+────────────────────────────────────────────────────────────────────────────────────────────────────────────
+myStorageAccount           minimumTlsVersion           TLS1_2                TLS1_0                 DRIFTED
+myStorageAccount           enableHttpsTrafficOnly      true                  true                   COMPLIANT
+myKeyVault                 enableSoftDelete            true                  false                  DRIFTED
+myKeyVault                 enablePurgeProtection       true                  true                   COMPLIANT
+myAppServicePlan           —                           Standard_S1           —                      MISSING

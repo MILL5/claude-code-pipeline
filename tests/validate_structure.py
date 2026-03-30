@@ -22,7 +22,7 @@ from pathlib import Path
 
 PIPELINE_ROOT = Path(__file__).resolve().parent.parent
 
-ADAPTERS = ["python", "react", "swift-ios"]
+ADAPTERS = ["python", "react", "swift-ios", "bicep"]
 
 REQUIRED_ADAPTER_FILES = [
     "adapter.md",
@@ -54,9 +54,27 @@ REQUIRED_SKILLS = [
     "summarize-implementation/SKILL.md",
     "token-analysis/SKILL.md",
     "fix-defects/SKILL.md",
+    "validate-bicep/SKILL.md",
+    "deploy-bicep/SKILL.md",
+    "azure-cost-estimate/SKILL.md",
+    "security-scan/SKILL.md",
+    "infra-test-runner/SKILL.md",
+    "azure-drift-check/SKILL.md",
+    "azure-login/SKILL.md",
 ]
 
 ESSENTIAL_OVERLAY_MAX_CHARS = 1000
+
+OVERLAYS = ["azure-sdk"]
+
+# Overlays intentionally omit test-overlay.md: testing patterns for Azure SDK
+# are language-specific and covered by each adapter's own test overlay.
+REQUIRED_OVERLAY_FILES = [
+    "architect-overlay.md",
+    "implementer-overlay.md",
+    "implementer-overlay-essential.md",
+    "reviewer-overlay.md",
+]
 
 # Markers that must exist in agent files for overlay injection
 AGENT_MARKERS = {
@@ -541,6 +559,77 @@ def check_fix_defects_skill(result: ValidationResult) -> None:
         result.fail("fix-defects missing PR comment reply mechanism")
 
 
+def check_overlay_completeness(result: ValidationResult) -> None:
+    """Check each overlay has all required files."""
+    for overlay in OVERLAYS:
+        overlay_dir = PIPELINE_ROOT / "overlays" / overlay
+        if not overlay_dir.is_dir():
+            result.fail(f"Missing overlay directory: overlays/{overlay}/")
+            continue
+
+        for req_file in REQUIRED_OVERLAY_FILES:
+            path = overlay_dir / req_file
+            if path.exists():
+                result.ok(f"Overlay {overlay}: {req_file} exists")
+            else:
+                result.fail(f"Overlay {overlay}: missing {req_file}")
+
+
+def check_overlay_essential_size(result: ValidationResult) -> None:
+    """Overlay essential overlays must be compact (under threshold)."""
+    for overlay in OVERLAYS:
+        path = PIPELINE_ROOT / "overlays" / overlay / "implementer-overlay-essential.md"
+        if not path.exists():
+            continue  # already caught by completeness check
+
+        size = len(path.read_text())
+        if size <= ESSENTIAL_OVERLAY_MAX_CHARS:
+            result.ok(f"Overlay {overlay}: essential overlay is {size} chars (under {ESSENTIAL_OVERLAY_MAX_CHARS})")
+        else:
+            result.fail(
+                f"Overlay {overlay}: essential overlay is {size} chars "
+                f"(exceeds {ESSENTIAL_OVERLAY_MAX_CHARS} limit)"
+            )
+
+
+def check_orchestrate_overlay_loading(result: ValidationResult) -> None:
+    """Orchestrate must document cross-cutting overlay loading."""
+    orchestrate_path = PIPELINE_ROOT / "skills" / "orchestrate" / "SKILL.md"
+    if not orchestrate_path.exists():
+        return
+
+    content = orchestrate_path.read_text()
+
+    if "overlays" in content.lower():
+        result.ok("Orchestrate documents overlay loading")
+    else:
+        result.fail("Orchestrate missing overlay loading documentation")
+
+    if "Cross-Cutting" in content:
+        result.ok("Orchestrate documents cross-cutting overlay composition")
+    else:
+        result.fail("Orchestrate missing cross-cutting overlay composition documentation")
+
+
+def check_init_bicep_detection(result: ValidationResult) -> None:
+    """init.sh must contain Bicep stack detection."""
+    init_path = PIPELINE_ROOT / "init.sh"
+    if not init_path.exists():
+        return
+
+    content = init_path.read_text()
+
+    if "bicep" in content.lower():
+        result.ok("init.sh references bicep stack")
+    else:
+        result.fail("init.sh missing bicep stack detection")
+
+    if "detect_overlays" in content or "overlays" in content:
+        result.ok("init.sh supports overlay detection")
+    else:
+        result.fail("init.sh missing overlay detection support")
+
+
 def run_all_checks(verbose: bool = False) -> ValidationResult:
     result = ValidationResult()
 
@@ -562,6 +651,10 @@ def run_all_checks(verbose: bool = False) -> ValidationResult:
         ("Skill frontmatter", check_skill_frontmatter),
         ("Cross-references", check_cross_references),
         ("Fix-defects skill", check_fix_defects_skill),
+        ("Overlay completeness", check_overlay_completeness),
+        ("Overlay essential size", check_overlay_essential_size),
+        ("Orchestrate overlay loading", check_orchestrate_overlay_loading),
+        ("init.sh bicep detection", check_init_bicep_detection),
     ]
 
     for name, check_fn in checks:

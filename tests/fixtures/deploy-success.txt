@@ -1,0 +1,21 @@
+Running what-if preview...
+Template: main.bicep
+Resource Group: rg-staging
+Parameters: staging.bicepparam
+
+What-if results:
+  Create: 2
+  Modify: 1
+  NoChange: 3
+
+User confirmed: yes
+
+Deploying to rg-staging...
+
+DEPLOY SUCCEEDED | 2 resources created | 1 modified
+
+Resource                          Type                                    Operation
+──────────────────────────────────────────────────────────────────────────────────────
+myStorageAccount                  Microsoft.Storage/storageAccounts       Create
+myAppServicePlan                  Microsoft.Web/serverfarms               Create
+myKeyVault                        Microsoft.KeyVault/vaults               Modify

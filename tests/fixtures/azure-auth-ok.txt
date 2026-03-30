@@ -1,0 +1,14 @@
+Checking az CLI...
+az CLI version: 2.64.0
+
+Checking authentication...
+Authenticated.
+
+AZURE CONTEXT
+  Subscription:  My Dev Subscription (a1b2c3d4-e5f6-7890-abcd-ef1234567890)
+  Tenant:        Contoso (11111111-2222-3333-4444-555555555555)
+  User:          dev@contoso.com
+  Cloud:         AzureCloud
+  Auth method:   Interactive (az login)
+
+AZURE AUTH OK | Subscription: My Dev Subscription (a1b2c3d4-e5f6-7890-abcd-ef1234567890) | User: dev@contoso.com | Method: interactive

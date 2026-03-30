@@ -1,0 +1,23 @@
+Building in: /home/user/infra
+Bicep files: 4
+Config:      bicepconfig.json found
+Modules:     modules/ directory found
+
+--- Running: bicep lint ---
+Running: bicep lint main.bicep
+Running: bicep lint modules/storage.bicep
+Running: bicep lint modules/networking.bicep
+Running: bicep lint modules/keyvault.bicep
+
+--- Running: bicep build ---
+Running: bicep build main.bicep
+Running: bicep build modules/storage.bicep
+Running: bicep build modules/networking.bicep
+Running: bicep build modules/keyvault.bicep
+
+File                      Ln  Warning
+-------------------------------------------------------
+modules/storage.bicep     12  [no-unused-params] Parameter 'legacySku' is declared but never used
+modules/networking.bicep  45  [prefer-interpolation] Use string interpolation instead of the concat function
+
+BUILD SUCCEEDED  |  2 warning(s)

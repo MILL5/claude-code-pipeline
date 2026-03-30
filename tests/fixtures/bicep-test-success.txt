@@ -1,0 +1,17 @@
+Project dir: /home/user/infra
+Bicep files: 4
+Test files:  2
+PSRule:      available
+ARM-TTK:     not found
+az CLI:      available
+Pester:      available
+Resources:   6 unique types
+
+--- Running: psrule ---
+Running: Invoke-PSRule -InputPath . -Module PSRule.Rules.Azure -Baseline Azure.Default -OutputFormat Json
+
+Coverage:  Resources: 6 types  |  PSRule: active
+
+Summary: Total: 18, Passed: 18, Failed: 0 | Coverage: 83.3%
+
+All tests passed.

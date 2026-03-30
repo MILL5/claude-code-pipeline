@@ -5,6 +5,7 @@
   "detection": [
     { "type": "file_contains", "path": "requirements.txt", "pattern": "^azure-" },
     { "type": "file_contains", "path": "pyproject.toml", "pattern": "azure-" },
-    { "type": "file_contains", "path": "package.json", "pattern": "\"@azure/" }
+    { "type": "file_contains", "path": "package.json", "pattern": "\"@azure/" },
+    { "type": "file_glob_contains", "path": "*.csproj", "pattern": "Include=\"Azure\\." }
   ]
 }

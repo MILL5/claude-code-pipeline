@@ -591,14 +591,21 @@ Contributions welcome for new adapters.
 ### `.claude/pipeline.config`
 
 ```ini
-# Active tech-stack adapter
-stack=react
+# Active tech-stack adapters (comma-separated, first is primary/fallback)
+stacks=react,python
+
+# File-to-stack mapping (glob patterns, comma-separated per stack)
+stack_paths.react=src/frontend/**
+stack_paths.python=src/backend/**
 
 # Absolute path to the pipeline repo
 pipeline_root=/path/to/claude-code-pipeline
 
 # Cross-cutting overlays (comma-separated, empty if none)
 overlays=azure-sdk
+
+# Capabilities aggregated from active adapters and overlays
+capabilities=azure-auth
 
 # Date this config was generated
 initialized=2026-03-29T00:00:00Z

@@ -637,7 +637,7 @@ def check_orchestrate_overlay_loading(result: ValidationResult) -> None:
 
 REQUIRED_ADAPTER_MANIFEST_FIELDS = ["name", "display_name", "capabilities", "detection", "stack_paths"]
 REQUIRED_OVERLAY_MANIFEST_FIELDS = ["name", "display_name", "capabilities", "detection"]
-VALID_DETECTION_TYPES = {"file_exists", "file_glob", "file_contains"}
+VALID_DETECTION_TYPES = {"file_exists", "file_glob", "file_contains", "file_glob_contains"}
 
 
 def check_manifest_validity(result: ValidationResult) -> None:
@@ -681,6 +681,30 @@ def check_manifest_validity(result: ValidationResult) -> None:
             else:
                 result.fail(f"Adapter {adapter}: invalid detection rule type '{rtype}'")
 
+        # Verify detection_fallback rules (if present) have valid types
+        fallback = data.get("detection_fallback")
+        if fallback is not None:
+            for rule in fallback.get("rules", []):
+                rtype = rule.get("type", "")
+                if rtype in VALID_DETECTION_TYPES:
+                    result.ok(f"Adapter {adapter}: fallback rule type '{rtype}' is valid")
+                else:
+                    result.fail(f"Adapter {adapter}: invalid fallback rule type '{rtype}'")
+
+        # Verify implies_overlays is a list and references existing overlay directories
+        implies = data.get("implies_overlays")
+        if implies is not None:
+            if isinstance(implies, list):
+                result.ok(f"Adapter {adapter}: implies_overlays is a list")
+                for ov_name in implies:
+                    ov_dir = PIPELINE_ROOT / "overlays" / ov_name
+                    if ov_dir.is_dir():
+                        result.ok(f"Adapter {adapter}: implied overlay '{ov_name}' exists")
+                    else:
+                        result.fail(f"Adapter {adapter}: implied overlay '{ov_name}' not found at overlays/{ov_name}/")
+            else:
+                result.fail(f"Adapter {adapter}: implies_overlays must be a list")
+
     for overlay in OVERLAYS:
         manifest_path = PIPELINE_ROOT / "overlays" / overlay / "manifest.json"
         if not manifest_path.exists():
@@ -703,6 +727,14 @@ def check_manifest_validity(result: ValidationResult) -> None:
             result.ok(f"Overlay {overlay}: manifest name matches directory")
         else:
             result.fail(f"Overlay {overlay}: manifest name '{data.get('name')}' != directory name '{overlay}'")
+
+        # Verify detection rules have valid types
+        for rule in data.get("detection", []):
+            rtype = rule.get("type", "")
+            if rtype in VALID_DETECTION_TYPES:
+                result.ok(f"Overlay {overlay}: detection rule type '{rtype}' is valid")
+            else:
+                result.fail(f"Overlay {overlay}: invalid detection rule type '{rtype}'")
 
 
 def run_all_checks(verbose: bool = False) -> ValidationResult:

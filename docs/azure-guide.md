@@ -43,9 +43,11 @@ bash .claude/pipeline/init.sh . --stack=bicep     # Use Bicep adapter explicitly
 Check `.claude/pipeline.config`:
 
 ```ini
-stack=bicep
+stacks=bicep
+stack_paths.bicep=infra/**
 pipeline_root=/path/to/claude-code-pipeline
 overlays=azure-sdk
+capabilities=azure-auth
 initialized=2026-03-29T12:00:00Z
 ```
 

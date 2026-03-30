@@ -110,6 +110,14 @@ eval_detection_rule() {
         file_contains)
             [ -f "$dir/$rpath" ] && grep -qE "$rpattern" "$dir/$rpath" 2>/dev/null && return 0
             ;;
+        file_glob_contains)
+            # Match files by glob, then check content of each
+            for _f in "$dir"/$rpath; do
+                if [ -e "$_f" ] && grep -qE "$rpattern" "$_f" 2>/dev/null; then
+                    return 0
+                fi
+            done
+            ;;
     esac
     return 1
 }
@@ -297,7 +305,6 @@ aggregate_capabilities() {
 if [ ${#STACKS[@]} -eq 0 ]; then
     read -ra STACKS <<< "$(detect_stacks "$PROJECT_DIR")"
     if [ ${#STACKS[@]} -eq 0 ]; then
-        local avail
         avail=$(available_adapters | tr ' ' ', ')
         error "Could not auto-detect tech stack. Use --stack=<name> to specify.\nAvailable: $avail"
     fi
@@ -311,8 +318,6 @@ for s in "${STACKS[@]}"; do
     [ -d "$PIPELINE_ROOT/adapters/$s" ] || error "Adapter not found: $PIPELINE_ROOT/adapters/$s"
 done
 
-# For backward compatibility, set STACK to the primary (first) stack
-STACK="${STACKS[0]}"
 STACKS_CSV=$(IFS=,; echo "${STACKS[*]}")
 
 # --- Step 3: Detect overlays and write pipeline.config ---

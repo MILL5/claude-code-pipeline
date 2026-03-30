@@ -4,7 +4,7 @@
 # Bootstrap script: links the pipeline into a target project's .claude/ directory
 #
 # Usage:
-#   bash init.sh /path/to/project [--stack=swift-ios|react|python] [--force]
+#   bash init.sh /path/to/project [--stack=swift-ios|react|python|bicep] [--force]
 #
 
 set -euo pipefail
@@ -28,7 +28,7 @@ Arguments:
   project-dir          Path to the target project root
 
 Options:
-  --stack=<name>       Force a specific adapter (swift-ios, react, python)
+  --stack=<name>       Force a specific adapter (swift-ios, react, python, bicep)
                        Auto-detected from project files if omitted
   --force              Overwrite existing symlinks and config
   --help               Show this help message
@@ -88,6 +88,21 @@ detect_stack() {
         return
     fi
 
+    # Check for Bicep (before Python — a Bicep project may have requirements.txt for tooling)
+    # Check root, infra/, infrastructure/, deploy/ for .bicep files
+    for bicep_dir in "$dir" "$dir/infra" "$dir/infrastructure" "$dir/deploy" "$dir/modules"; do
+        for f in "$bicep_dir"/*.bicep; do
+            if [ -e "$f" ]; then
+                echo "bicep"
+                return
+            fi
+        done
+    done
+    if [ -f "$dir/bicepconfig.json" ]; then
+        echo "bicep"
+        return
+    fi
+
     # Check for React (package.json with react dependency)
     if [ -f "$dir/package.json" ]; then
         if grep -q '"react"' "$dir/package.json" 2>/dev/null; then
@@ -113,10 +128,56 @@ detect_stack() {
     echo ""
 }
 
+detect_overlays() {
+    local dir="$1"
+    local stack="$2"
+    local overlays=""
+
+    # Bicep adapter always implies Azure SDK overlay
+    if [ "$stack" = "bicep" ]; then
+        overlays="azure-sdk"
+        echo "$overlays"
+        return
+    fi
+
+    # Check Python dependencies for Azure SDK
+    if [ -f "$dir/requirements.txt" ]; then
+        if grep -qE '^azure-' "$dir/requirements.txt" 2>/dev/null; then
+            overlays="azure-sdk"
+        fi
+    fi
+    if [ -z "$overlays" ] && [ -f "$dir/pyproject.toml" ]; then
+        if grep -q 'azure-' "$dir/pyproject.toml" 2>/dev/null; then
+            overlays="azure-sdk"
+        fi
+    fi
+
+    # Check Node/JS dependencies for Azure SDK
+    if [ -z "$overlays" ] && [ -f "$dir/package.json" ]; then
+        if grep -q '"@azure/' "$dir/package.json" 2>/dev/null; then
+            overlays="azure-sdk"
+        fi
+    fi
+
+    # Check .NET dependencies for Azure SDK
+    if [ -z "$overlays" ]; then
+        for csproj in "$dir"/*.csproj; do
+            if [ -e "$csproj" ]; then
+                if grep -qE 'Include="Azure\.' "$csproj" 2>/dev/null; then
+                    overlays="azure-sdk"
+                    break
+                fi
+            fi
+        done
+    fi
+
+    echo "$overlays"
+}
+
 if [ -z "$STACK" ]; then
     STACK=$(detect_stack "$PROJECT_DIR")
     if [ -z "$STACK" ]; then
-        error "Could not auto-detect tech stack. Use --stack=<name> to specify.\nAvailable: swift-ios, react, python"
+        error "Could not auto-detect tech stack. Use --stack=<name> to specify.\nAvailable: swift-ios, react, python, bicep"
     fi
     info "Auto-detected stack: $STACK"
 else
@@ -126,7 +187,12 @@ fi
 ADAPTER_DIR="$PIPELINE_ROOT/adapters/$STACK"
 [ -d "$ADAPTER_DIR" ] || error "Adapter not found: $ADAPTER_DIR"
 
-# --- Step 3: Write pipeline.config ---
+# --- Step 3: Detect overlays and write pipeline.config ---
+OVERLAYS=$(detect_overlays "$PROJECT_DIR" "$STACK")
+if [ -n "$OVERLAYS" ]; then
+    info "Detected overlay(s): $OVERLAYS"
+fi
+
 CONFIG_FILE="$CLAUDE_DIR/pipeline.config"
 if [ -f "$CONFIG_FILE" ] && [ "$FORCE" = false ]; then
     info "pipeline.config already exists. Use --force to overwrite."
@@ -140,6 +206,9 @@ stack=$STACK
 
 # Absolute path to the pipeline repo
 pipeline_root=$PIPELINE_ROOT
+
+# Cross-cutting overlays (comma-separated, empty if none)
+overlays=$OVERLAYS
 
 # Date this config was generated
 initialized=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -190,6 +259,14 @@ create_symlink "$PIPELINE_ROOT/skills" "$CLAUDE_DIR/skills" "skills"
 
 # Scripts (adapter-specific)
 create_symlink "$ADAPTER_DIR/scripts" "$CLAUDE_DIR/scripts" "scripts"
+
+# Overlays (cross-cutting, only when detected)
+if [ -n "$OVERLAYS" ]; then
+    OVERLAYS_DIR="$PIPELINE_ROOT/overlays"
+    if [ -d "$OVERLAYS_DIR" ]; then
+        create_symlink "$OVERLAYS_DIR" "$CLAUDE_DIR/overlays" "overlays"
+    fi
+fi
 
 # --- Step 5: Merge hooks into settings.json ---
 ADAPTER_HOOKS="$ADAPTER_DIR/hooks.json"
@@ -265,9 +342,15 @@ echo "  Symlinks:"
 echo "    .claude/agents  -> pipeline/agents"
 echo "    .claude/skills  -> pipeline/skills"
 echo "    .claude/scripts -> pipeline/adapters/$STACK/scripts"
+if [ -n "$OVERLAYS" ]; then
+echo "    .claude/overlays -> pipeline/overlays"
+fi
 echo ""
 echo "  Config:     .claude/pipeline.config"
 echo "  Hooks:      .claude/settings.json"
+if [ -n "$OVERLAYS" ]; then
+echo "  Overlays:   $OVERLAYS"
+fi
 echo ""
 echo "  Next steps:"
 echo "    1. Edit .claude/CLAUDE.md with your project description"

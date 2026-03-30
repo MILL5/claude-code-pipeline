@@ -1,0 +1,12 @@
+Detecting available scanners...
+PSRule for Azure: available
+Running PSRule security scan...
+
+SECURITY SCAN | Total: 4 findings | Critical: 1, High: 1, Medium: 2, Low: 0
+
+Rule                          Severity  Resource                  Description                              Recommendation
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+Azure.Storage.MinTLS          HIGH      myStorageAccount          TLS version below 1.2                    Set minimumTlsVersion to 'TLS1_2'
+Azure.KeyVault.SoftDelete     MEDIUM    myKeyVault                Soft delete not enabled                  Enable soft delete with 90-day retention
+Azure.SQL.FirewallIPRange     CRITICAL  mySqlServer               Firewall allows 0.0.0.0-255.255.255.255  Restrict firewall rules to specific IPs
+Azure.NSG.Associated          MEDIUM    webNsg                    NSG not associated with subnet           Associate NSG with target subnet

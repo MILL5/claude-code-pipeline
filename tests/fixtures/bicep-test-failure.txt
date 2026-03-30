@@ -1,0 +1,21 @@
+Project dir: /home/user/infra
+Bicep files: 4
+Test files:  2
+PSRule:      available
+ARM-TTK:     not found
+az CLI:      available
+Pester:      available
+Resources:   6 unique types
+
+--- Running: psrule ---
+Running: Invoke-PSRule -InputPath . -Module PSRule.Rules.Azure -Baseline Azure.Default -OutputFormat Json
+
+Coverage:  Resources: 6 types  |  PSRule: active
+
+Summary: Total: 18, Passed: 15, Failed: 3 | Coverage: 83.3%
+
+Test                                           Reason
+---------------------------------------------------------------------------------------------
+Azure.Storage.MinTLS:myStorageAccount          TLS version is below minimum required (1.2)
+Azure.KeyVault.SoftDelete:myKeyVault           Soft delete is not enabled
+Azure.NSG.Associated:webNsg                    NSG is not associated with a subnet or NIC

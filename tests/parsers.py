@@ -402,3 +402,142 @@ def parse_defect_reports(comments: list[dict]) -> list[dict]:
         d["id"] = i
 
     return defects
+
+
+# ---------------------------------------------------------------------------
+# Azure / Bicep skill output parsers
+# ---------------------------------------------------------------------------
+
+def parse_cost_estimate_output(output: str) -> dict | None:
+    """Parse azure-cost-estimate skill output.
+
+    Expected format:
+        COST ESTIMATE | Total: $X.XX/month
+    """
+    match = re.search(
+        r"COST ESTIMATE\s*\|\s*Total:\s*\$([0-9,.]+)/month",
+        output,
+    )
+    if not match:
+        return None
+
+    total_str = match.group(1).replace(",", "")
+    try:
+        total = float(total_str)
+    except ValueError:
+        return None
+
+    return {"status": "estimated", "total_monthly": total}
+
+
+def parse_security_scan_output(output: str) -> dict | None:
+    """Parse security-scan skill output.
+
+    Expected format:
+        SECURITY SCAN | Total: N findings | Critical: N, High: N, Medium: N, Low: N
+    """
+    match = re.search(
+        r"SECURITY SCAN\s*\|\s*Total:\s*(\d+)\s+findings?\s*\|\s*"
+        r"Critical:\s*(\d+),\s*High:\s*(\d+),\s*Medium:\s*(\d+),\s*Low:\s*(\d+)",
+        output,
+    )
+    if not match:
+        return None
+
+    return {
+        "status": "scanned",
+        "total": int(match.group(1)),
+        "critical": int(match.group(2)),
+        "high": int(match.group(3)),
+        "medium": int(match.group(4)),
+        "low": int(match.group(5)),
+    }
+
+
+def parse_drift_check_output(output: str) -> dict | None:
+    """Parse azure-drift-check skill output.
+
+    Expected format:
+        DRIFT CHECK | Total: N resources | Drifted: N, Compliant: N, Missing: N
+    """
+    match = re.search(
+        r"DRIFT CHECK\s*\|\s*Total:\s*(\d+)\s+resources?\s*\|\s*"
+        r"Drifted:\s*(\d+),\s*Compliant:\s*(\d+),\s*Missing:\s*(\d+)",
+        output,
+    )
+    if not match:
+        return None
+
+    return {
+        "status": "checked",
+        "total": int(match.group(1)),
+        "drifted": int(match.group(2)),
+        "compliant": int(match.group(3)),
+        "missing": int(match.group(4)),
+    }
+
+
+def parse_deploy_bicep_output(output: str) -> dict | None:
+    """Parse deploy-bicep skill output.
+
+    Expected formats:
+        DEPLOY SUCCEEDED | N resources created | N modified
+        DEPLOY FAILED | <error summary>
+    """
+    success_match = re.search(
+        r"DEPLOY SUCCEEDED\s*\|\s*(\d+)\s+resources?\s+created\s*\|\s*(\d+)\s+modified",
+        output,
+    )
+    if success_match:
+        return {
+            "status": "succeeded",
+            "created": int(success_match.group(1)),
+            "modified": int(success_match.group(2)),
+        }
+
+    fail_match = re.search(r"DEPLOY FAILED\s*\|\s*(.+)", output)
+    if fail_match:
+        return {
+            "status": "failed",
+            "error": fail_match.group(1).strip(),
+        }
+
+    return None
+
+
+def parse_azure_auth_output(output: str) -> dict | None:
+    """Parse azure-login skill output.
+
+    Expected formats:
+        AZURE AUTH OK | Subscription: <name> (<id>) | User: <upn> | Method: <method>
+        AZURE AUTH FAILED | <reason>
+        AZURE AUTH WARNING | <message>
+    """
+    ok_match = re.search(
+        r"AZURE AUTH OK\s*\|\s*Subscription:\s*(.+?)\s*\(([^)]+)\)\s*\|\s*User:\s*(\S+)\s*\|\s*Method:\s*(.+)",
+        output,
+    )
+    if ok_match:
+        return {
+            "status": "ok",
+            "subscription_name": ok_match.group(1).strip(),
+            "subscription_id": ok_match.group(2).strip(),
+            "user": ok_match.group(3).strip(),
+            "method": ok_match.group(4).strip(),
+        }
+
+    fail_match = re.search(r"AZURE AUTH FAILED\s*\|\s*(.+)", output)
+    if fail_match:
+        return {
+            "status": "failed",
+            "reason": fail_match.group(1).strip(),
+        }
+
+    warn_match = re.search(r"AZURE AUTH WARNING\s*\|\s*(.+)", output)
+    if warn_match:
+        return {
+            "status": "warning",
+            "message": warn_match.group(1).strip(),
+        }
+
+    return None

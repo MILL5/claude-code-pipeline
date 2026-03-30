@@ -21,12 +21,17 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from parsers import (
+    parse_azure_auth_output,
     parse_build_output,
+    parse_cost_estimate_output,
     parse_defect_report,
     parse_defect_reports,
+    parse_deploy_bicep_output,
+    parse_drift_check_output,
     parse_implementer_result,
     parse_open_pr_result,
     parse_reviewer_result,
+    parse_security_scan_output,
     parse_test_output,
     parse_token_analysis_result,
     parse_token_report,
@@ -115,6 +120,38 @@ class TestBuildOutput(unittest.TestCase):
         result = parse_build_output(fixture)
         self.assertEqual(result["status"], "failed")
         self.assertTrue(result["errors"] > 0)
+
+
+class TestBicepBuildOutput(unittest.TestCase):
+    def test_bicep_build_success(self) -> None:
+        fixture = (FIXTURES_DIR / "bicep-build-success.txt").read_text()
+        result = parse_build_output(fixture)
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["warnings"], 2)
+
+    def test_bicep_build_failure(self) -> None:
+        fixture = (FIXTURES_DIR / "bicep-build-failure.txt").read_text()
+        result = parse_build_output(fixture)
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(result["errors"], 2)
+        self.assertEqual(result["warnings"], 1)
+
+
+class TestBicepTestOutput(unittest.TestCase):
+    def test_bicep_test_success(self) -> None:
+        fixture = (FIXTURES_DIR / "bicep-test-success.txt").read_text()
+        result = parse_test_output(fixture)
+        self.assertNotIn("error", result)
+        self.assertEqual(result["failed"], 0)
+        self.assertEqual(result["total"], 18)
+        self.assertGreaterEqual(result["coverage"], 0.0)
+
+    def test_bicep_test_failure(self) -> None:
+        fixture = (FIXTURES_DIR / "bicep-test-failure.txt").read_text()
+        result = parse_test_output(fixture)
+        self.assertNotIn("error", result)
+        self.assertEqual(result["failed"], 3)
+        self.assertEqual(result["total"], 18)
 
 
 class TestTestOutput(unittest.TestCase):
@@ -306,6 +343,103 @@ class TestDefectReportsBatch(unittest.TestCase):
     def test_empty_comments_list(self) -> None:
         defects = parse_defect_reports([])
         self.assertEqual(len(defects), 0)
+
+
+class TestCostEstimateOutput(unittest.TestCase):
+    def test_cost_estimate_parsing(self) -> None:
+        fixture = (FIXTURES_DIR / "cost-estimate.txt").read_text()
+        result = parse_cost_estimate_output(fixture)
+        self.assertIsNotNone(result)
+        self.assertEqual(result["status"], "estimated")
+        self.assertAlmostEqual(result["total_monthly"], 284.50)
+
+    def test_cost_estimate_no_match(self) -> None:
+        result = parse_cost_estimate_output("No cost data here")
+        self.assertIsNone(result)
+
+
+class TestSecurityScanOutput(unittest.TestCase):
+    def test_security_scan_parsing(self) -> None:
+        fixture = (FIXTURES_DIR / "security-scan-findings.txt").read_text()
+        result = parse_security_scan_output(fixture)
+        self.assertIsNotNone(result)
+        self.assertEqual(result["status"], "scanned")
+        self.assertEqual(result["total"], 4)
+        self.assertEqual(result["critical"], 1)
+        self.assertEqual(result["high"], 1)
+        self.assertEqual(result["medium"], 2)
+        self.assertEqual(result["low"], 0)
+
+    def test_security_scan_no_match(self) -> None:
+        result = parse_security_scan_output("No scan results")
+        self.assertIsNone(result)
+
+
+class TestDriftCheckOutput(unittest.TestCase):
+    def test_drift_check_parsing(self) -> None:
+        fixture = (FIXTURES_DIR / "drift-check-drifted.txt").read_text()
+        result = parse_drift_check_output(fixture)
+        self.assertIsNotNone(result)
+        self.assertEqual(result["status"], "checked")
+        self.assertEqual(result["total"], 5)
+        self.assertEqual(result["drifted"], 2)
+        self.assertEqual(result["compliant"], 2)
+        self.assertEqual(result["missing"], 1)
+
+    def test_drift_check_no_match(self) -> None:
+        result = parse_drift_check_output("No drift data")
+        self.assertIsNone(result)
+
+
+class TestDeployBicepOutput(unittest.TestCase):
+    def test_deploy_success_parsing(self) -> None:
+        fixture = (FIXTURES_DIR / "deploy-success.txt").read_text()
+        result = parse_deploy_bicep_output(fixture)
+        self.assertIsNotNone(result)
+        self.assertEqual(result["status"], "succeeded")
+        self.assertEqual(result["created"], 2)
+        self.assertEqual(result["modified"], 1)
+
+    def test_deploy_failure_parsing(self) -> None:
+        output = "DEPLOY FAILED | Resource group 'rg-staging' not found"
+        result = parse_deploy_bicep_output(output)
+        self.assertIsNotNone(result)
+        self.assertEqual(result["status"], "failed")
+        self.assertIn("not found", result["error"])
+
+    def test_deploy_no_match(self) -> None:
+        result = parse_deploy_bicep_output("No deploy output")
+        self.assertIsNone(result)
+
+
+class TestAzureAuthOutput(unittest.TestCase):
+    def test_auth_ok_parsing(self) -> None:
+        fixture = (FIXTURES_DIR / "azure-auth-ok.txt").read_text()
+        result = parse_azure_auth_output(fixture)
+        self.assertIsNotNone(result)
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["subscription_name"], "My Dev Subscription")
+        self.assertEqual(result["subscription_id"], "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
+        self.assertEqual(result["user"], "dev@contoso.com")
+        self.assertEqual(result["method"], "interactive")
+
+    def test_auth_failed_parsing(self) -> None:
+        fixture = (FIXTURES_DIR / "azure-auth-failed.txt").read_text()
+        result = parse_azure_auth_output(fixture)
+        self.assertIsNotNone(result)
+        self.assertEqual(result["status"], "failed")
+        self.assertIn("Not logged in", result["reason"])
+
+    def test_auth_warning_parsing(self) -> None:
+        output = "AZURE AUTH WARNING | Resource group 'rg-dev' does not exist"
+        result = parse_azure_auth_output(output)
+        self.assertIsNotNone(result)
+        self.assertEqual(result["status"], "warning")
+        self.assertIn("does not exist", result["message"])
+
+    def test_auth_no_match(self) -> None:
+        result = parse_azure_auth_output("No auth output here")
+        self.assertIsNone(result)
 
 
 if __name__ == "__main__":

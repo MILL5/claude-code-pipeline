@@ -24,7 +24,7 @@ Before starting, read these files (skip if already in context from this session)
 
 Before any agent launches, determine the active tech-stack adapter:
 
-1. Read `.claude/pipeline.config` to get the `stack` and `pipeline_root` values
+1. Read `.claude/pipeline.config` to get the `stack`, `pipeline_root`, and `overlays` values
 2. Read `<pipeline_root>/adapters/<stack>/adapter.md` — this is the **adapter config**
 3. For each agent you launch, read the relevant overlay file from `<pipeline_root>/adapters/<stack>/`:
    - `architect-overlay.md` — injected into architect-agent prompts
@@ -40,6 +40,67 @@ The adapter config also declares:
 - **Build command**: The command agents should use to build (e.g., `python3 .claude/scripts/build.py`)
 - **Test command**: The command agents should use to test (e.g., `python3 .claude/scripts/test.py`)
 - **Blocked commands**: Raw commands that hooks prevent (for awareness)
+
+## Step 0.1: Load Cross-Cutting Overlays
+
+After loading the adapter, check `pipeline.config` for the `overlays` key:
+
+1. Read the `overlays` value (comma-separated). If empty or missing, skip this step.
+2. For each overlay name (e.g., `azure-sdk`):
+   - Read `<pipeline_root>/overlays/<overlay_name>/architect-overlay.md`
+   - Read `<pipeline_root>/overlays/<overlay_name>/implementer-overlay.md`
+   - Read `<pipeline_root>/overlays/<overlay_name>/implementer-overlay-essential.md`
+   - Read `<pipeline_root>/overlays/<overlay_name>/reviewer-overlay.md`
+
+3. When composing agent prompts, **append** the overlay content AFTER the adapter overlay
+   at the same `<!-- ADAPTER:TECH_STACK_CONTEXT -->` marker. Use this format:
+
+   ```
+   <adapter overlay content>
+
+   ---
+   ## Cross-Cutting: Azure SDK Context
+   <overlay content>
+   ```
+
+4. For Haiku tasks in Step 2, append the overlay's `implementer-overlay-essential.md`
+   after the adapter's essential variant. The combined essential content should remain concise
+   to preserve signal-to-noise ratio for Haiku.
+
+5. The overlay's reviewer content is appended after the adapter's reviewer overlay in Step 2.1,
+   giving the code reviewer awareness of both stack-specific and Azure SDK patterns.
+
+## Step 0.2: Azure Authentication Pre-Flight
+
+**When to run:** If `stack=bicep` OR `overlays` contains `azure-sdk`, AND the pipeline will
+perform Azure-dependent operations (what-if, deploy, drift-check, infra-test).
+
+**Skip if:** The pipeline only involves local operations (bicep build/lint, PSRule, security scan,
+cost estimate). Build and review steps do NOT require Azure auth.
+
+**How to run:** Invoke the `azure-login` skill. It will:
+
+1. Verify `az` CLI is installed
+2. Verify the user is authenticated (`az account show`)
+3. Display the active subscription, tenant, user, and auth method
+4. Cache the result as `AZURE_AUTH_STATUS` for the session
+
+**On failure:** The `azure-login` skill prints remediation guidance. The pipeline should:
+- **Pause** and present the guidance to the user
+- **Ask** the user to authenticate (e.g., `! az login` in the Claude Code prompt)
+- **Retry** the pre-flight check after the user confirms they have logged in
+- **Do NOT** proceed with Azure-dependent steps if auth fails
+
+**On success:** Record the auth context:
+- `AZURE_AUTH_STATUS = OK`
+- `AZURE_SUBSCRIPTION_ID`, `AZURE_SUBSCRIPTION_NAME`, `AZURE_TENANT_ID`
+- `AZURE_USER`, `AZURE_AUTH_METHOD`
+
+Subsequent Azure-dependent skills check `AZURE_AUTH_STATUS` and skip re-validation if already OK.
+If the target subscription or resource group changes mid-pipeline, re-validate.
+
+**Timing:** This check runs lazily — only before the first Azure-dependent step, not at pipeline
+start. This avoids blocking developers who are only doing local build/lint/review cycles.
 
 ## Step 0.5: Initialize Token Tracking
 

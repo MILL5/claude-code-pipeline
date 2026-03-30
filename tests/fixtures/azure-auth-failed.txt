@@ -1,0 +1,18 @@
+Checking az CLI...
+az CLI version: 2.64.0
+
+Checking authentication...
+Not authenticated.
+
+AZURE AUTH FAILED | Not logged in
+
+Choose your login method:
+
+  Interactive (recommended for local dev):
+    az login
+
+  Service principal (CI/CD):
+    az login --service-principal -u <app-id> -p <secret-or-cert> --tenant <tenant-id>
+
+  Managed identity (Azure-hosted):
+    az login --identity

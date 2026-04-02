@@ -143,8 +143,6 @@ EXTRACT_PROFILES = {
         "Current State",
     ],
     "1b": [
-        "Architecture",
-        "Key Services / Modules",
         "Data Flow",
         "Conventions",
         "Testing",
@@ -486,6 +484,45 @@ def check_orchestrate_local_overlay_loading(result: ValidationResult) -> None:
         result.fail("Orchestrate missing project overlay composition headers")
 
 
+def check_orchestrate_workflow_optimizations(result: ValidationResult) -> None:
+    """Orchestrate must document key workflow optimizations."""
+    orchestrate_path = PIPELINE_ROOT / "skills" / "orchestrate" / "SKILL.md"
+    if not orchestrate_path.exists():
+        return
+
+    content = orchestrate_path.read_text()
+
+    # Streaming reviews: reviews start as implementers complete, not after full wave
+    if "Streaming review" in content or "streaming review" in content.lower():
+        result.ok("Orchestrate documents streaming wave reviews")
+    else:
+        result.fail("Orchestrate missing streaming wave reviews documentation")
+
+    # Bug-fix reviewer reuse via SendMessage (same pattern as wave reviews)
+    if "bug-fix reviewer" in content.lower() or "bug-fix review" in content.lower():
+        result.ok("Orchestrate documents bug-fix reviewer reuse")
+    else:
+        result.fail("Orchestrate missing bug-fix reviewer reuse documentation")
+
+    # Parallel bug fixes for independent bugs
+    if "Parallel bug fix" in content or "parallel bug fix" in content.lower():
+        result.ok("Orchestrate documents parallel bug fixes")
+    else:
+        result.fail("Orchestrate missing parallel bug fixes documentation")
+
+    # HTML comment stripping for local overlays
+    if "strip HTML comment" in content or "strip html comment" in content.lower():
+        result.ok("Orchestrate documents HTML comment stripping for local overlays")
+    else:
+        result.fail("Orchestrate missing HTML comment stripping for local overlays")
+
+    # Token analysis runs in background during finalization
+    if "background" in content.lower() and "token analysis" in content.lower():
+        result.ok("Orchestrate documents background token analysis")
+    else:
+        result.fail("Orchestrate missing background token analysis documentation")
+
+
 def check_agent_frontmatter(result: ValidationResult) -> None:
     """Agent files must have valid YAML frontmatter with name, model, description."""
     frontmatter_re = re.compile(r"^---\n(.*?)\n---", re.DOTALL)
@@ -799,6 +836,7 @@ def run_all_checks(verbose: bool = False) -> ValidationResult:
         ("init.sh", check_init_script),
         ("Version file", check_version_file),
         ("Orchestrate local overlay loading", check_orchestrate_local_overlay_loading),
+        ("Workflow optimizations", check_orchestrate_workflow_optimizations),
         ("Agent frontmatter", check_agent_frontmatter),
         ("Skill frontmatter", check_skill_frontmatter),
         ("Cross-references", check_cross_references),

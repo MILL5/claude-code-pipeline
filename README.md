@@ -266,9 +266,13 @@ A typical feature plan targets **>=70% Haiku tasks**, making the mixed strategy 
 
 The pipeline also reduces per-step token consumption through several strategies:
 
-- **Scoped ORCHESTRATOR.md extracts**: Instead of pasting the full architecture file into every agent, the orchestrator extracts only the sections each agent needs (e.g., blast-radius analysis only gets Directory Structure, Fragile Areas, and Key Services)
+- **Scoped ORCHESTRATOR.md extracts**: Instead of pasting the full architecture file into every agent, the orchestrator extracts only the sections each agent needs. The 1b Extract excludes sections already present in the 1a-spec (Architecture, Key Services) to avoid duplication on the most expensive model.
 - **Essential overlay variants**: Haiku implementers receive a compact rules-only overlay (~500-800 chars) instead of the full overlay with examples (~3,500 chars). The reviewer has the full overlay and catches violations.
-- **Reviewer reuse via SendMessage**: Within a wave, one code-reviewer agent handles all reviews via SendMessage, avoiding re-ingestion of the agent definition and overlay per review (cap: 8 reviews per agent)
+- **Reviewer reuse via SendMessage**: Within a wave, one code-reviewer agent handles all reviews via SendMessage, avoiding re-ingestion of the agent definition and overlay per review (cap: 8 reviews per agent). Bug-fix reviews in Step 3.5 use the same reuse pattern.
+- **Streaming wave reviews**: Reviews begin as each implementer completes, not after the full wave finishes. This overlaps review work with still-running tasks, reducing wall-clock time.
+- **Parallel bug fixes**: Independent bugs (non-overlapping file sets) found during manual testing can be fixed in parallel using worktree isolation, same as Step 2 implementation.
+- **Local overlay comment stripping**: HTML comment blocks are stripped from `.claude/local/` files before injection, so template placeholders don't waste tokens.
+- **Background token analysis**: Step 5 runs concurrently with Step 4 (PR finalization) since it only needs the TOKEN_LEDGER, which is complete after Step 3.5.
 - **TOKEN_REPORT protocol**: All agents append a `---TOKEN_REPORT---` block to their output, self-reporting files read from disk, tool calls, and token consumption. This captures the ~43% of token usage invisible to the orchestrator's prompt-level tracking.
 - **Mandatory Step 5 analysis**: After every pipeline run, the token-analysis skill examines the accumulated ledger for cost anomalies, model distribution drift, prompt bloat, and escalation patterns — filing a GitHub issue on the pipeline repo when significant findings exist
 

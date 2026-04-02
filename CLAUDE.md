@@ -107,9 +107,13 @@ The orchestrator uses several strategies to reduce token consumption:
 - **Brief-size gate**: The planner enforces token limits on context briefs (Haiku: 3K, Sonnet: 6K, Opus: 8K). Oversized briefs must be trimmed or split before implementation.
 - **Wave batch cap**: Waves are capped at 4 tasks. The orchestrator splits larger waves into batches of ≤4, reducing blast radius and keeping agent calls under ~50K tokens.
 - **Plan output budget**: Context briefs are capped at 400 tokens each; total plan output targets ≤4,000 tokens for ≤15-task features.
-- **Scoped ORCHESTRATOR.md extracts**: Each agent receives only the sections it needs (1a gets fragile areas + architecture, 1b gets conventions + data flow, 3.5 gets fragile areas only), not the full file.
+- **Scoped ORCHESTRATOR.md extracts**: Each agent receives only the sections it needs (1a gets fragile areas + architecture, 1b gets only sections NOT already in 1a-spec, 3.5 gets fragile areas only), not the full file. The 1b Extract excludes Architecture and Key Services/Modules since those are already embedded in the 1a-spec.
 - **Essential overlay variants**: Haiku implementers receive a compact rules-only overlay (~500-800 chars) instead of the full overlay (~3,500 chars). The reviewer has the full overlay and catches violations.
-- **Reviewer reuse**: Within a wave, one code-reviewer agent handles all reviews via SendMessage, avoiding re-ingestion of the agent definition and overlay per review (cap: 8 reviews per agent).
+- **Reviewer reuse**: Within a wave, one code-reviewer agent handles all reviews via SendMessage, avoiding re-ingestion of the agent definition and overlay per review (cap: 8 reviews per agent). Bug-fix reviews in Step 3.5 use the same reuse pattern.
+- **Streaming reviews**: Reviews start as soon as each implementer completes, not after the full wave finishes. This overlaps review work with still-running implementer tasks.
+- **Parallel bug fixes**: Independent bugs (non-overlapping file sets) found during manual testing can be fixed in parallel using worktree isolation.
+- **Local overlay comment stripping**: HTML comment blocks are stripped from `.claude/local/` files before injection, so template placeholders don't waste tokens.
+- **Background token analysis**: Step 5 (token analysis) runs in the background concurrently with Step 4 (PR finalization), reducing wall-clock time.
 - **Cost-weighted distribution tracking**: Token analysis reports model distribution by dollar cost, not call count, preventing misleading metrics (e.g., "69% Haiku calls" masking 12% cost share).
 - **TOKEN_REPORT**: All agents append a `---TOKEN_REPORT---` block to their output reporting files read from disk, tool calls, and self-assessed token consumption. This captures the ~43% of token usage invisible to the orchestrator's prompt-level tracking.
 

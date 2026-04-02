@@ -119,13 +119,15 @@ After loading cross-cutting overlays, check for project-specific local overlays 
    - `.claude/local/architecture-rules.md` — injected into architect agent
    - `.claude/local/review-criteria.md` — injected into reviewer agent
 
-3. Build a **LOCAL_OVERLAYS** registry:
+3. For each file, **strip HTML comment blocks** (`<!-- ... -->`) and leading/trailing whitespace
+   before storing. This removes template placeholder comments that would waste tokens.
+   Build a **LOCAL_OVERLAYS** registry from the stripped content:
    ```
    LOCAL_OVERLAYS = {
-     all: <project-overlay.md content or empty>,
-     implementer: <coding-standards.md content or empty>,
-     architect: <architecture-rules.md content or empty>,
-     reviewer: <review-criteria.md content or empty>,
+     all: <project-overlay.md stripped content or empty>,
+     implementer: <coding-standards.md stripped content or empty>,
+     architect: <architecture-rules.md stripped content or empty>,
+     reviewer: <review-criteria.md stripped content or empty>,
    }
    ```
 
@@ -162,8 +164,9 @@ After loading cross-cutting overlays, check for project-specific local overlays 
    overlay exceeds 500 characters, consider trimming — the pipeline does not enforce a size
    limit on local overlays, but bloated overlays degrade Haiku signal-to-noise ratio.
 
-7. **If all local overlay files are empty or contain only HTML comments:** Skip injection
-   entirely — do not add empty `## Project:` headers.
+7. **If all local overlay files are empty after stripping:** Skip injection entirely — do not
+   add empty `## Project:` headers. A file that contains only the template placeholder
+   comments will be empty after stripping and is treated as absent.
 
 ## Step 0.3: Azure Authentication Pre-Flight
 
@@ -247,15 +250,15 @@ produce three scoped extracts:
 - `## Current State`
 
 **1b Extract** (for architect-planner — decomposition, brief writing):
-- `## Architecture`
-- `## Key Services / Modules`
 - `## Data Flow`
 - `## Conventions` (all subsections)
 - `## Testing`
 - `## Anti-Patterns (Do NOT)`
 
-The 1b agent also receives the 1a-spec which already contains the project overview, directory
-structure, fragile areas, and current state — so those sections are not needed again.
+The 1b agent receives the 1a-spec which already contains Project Overview, Directory Structure,
+Architecture, Key Services / Modules, Known Fragile Areas, and Current State — so those sections
+are excluded from the 1b Extract to avoid duplication. Only sections NOT present in the 1a-spec
+are included.
 
 **3.5 Extract** (for blast-radius analysis — file correlation, fragile area check):
 - `## Directory Structure`
@@ -276,7 +279,7 @@ Step 1a: ANALYZE & CLARIFY (architect-agent, Sonnet, interactive)
     |  Writes: .claude/tmp/1a-spec.md (enriched spec + recovery artifact)
     v
 Step 1b: PLAN (architect-agent, Sonnet default / Opus for novel architecture, fresh agent)
-    |  Reads: 1a-spec.md + full ORCHESTRATOR.md (clean context, ~15K tokens)
+    |  Reads: 1a-spec.md + 1b Extract from ORCHESTRATOR.md (clean context, ~12K tokens)
     |  Produces: ordered task list with context briefs
     |  Present to user for confirmation
     v
@@ -464,6 +467,12 @@ All subsequent commits and pushes target this branch.
 For each wave in the plan, launch implementer agents. **Tasks within a wave run in parallel.**
 Tasks across waves are sequential (wave N+1 waits for wave N to complete).
 
+**Streaming reviews:** Do NOT wait for all tasks in a wave to complete before starting reviews.
+As each implementer returns SUCCESS, immediately send it to the reviewer (via the wave's shared
+reviewer agent). This overlaps review work with still-running implementer tasks, reducing
+wall-clock time. The reviewer agent is launched on the first SUCCESS result; subsequent results
+use SendMessage. Failed implementers are reported to the user immediately without waiting.
+
 **Batch cap:** If a wave contains more than 4 tasks assigned to the same model, split them
 into multiple agent calls of at most 4 tasks each. This reduces blast radius (a failure at
 task 3 doesn't require re-running tasks 5-8) and keeps individual agent calls under ~50K
@@ -513,10 +522,11 @@ examples and patterns are valuable.
 **Stack scoping rationale:** The implementer only needs rules for the stack it is working in.
 Loading all stacks' overlays would dilute Haiku's signal-to-noise ratio and waste tokens.
 
-**After each implementer returns:**
+**After each implementer returns** (as soon as it completes, not after the full wave):
 
-- If `SUCCESS`: proceed to Step 2.1 (review)
-- If `FAILURE`: report the failure details to the user. Do NOT auto-retry implementation failures — these need human judgment.
+- If `SUCCESS`: immediately send to the wave's reviewer agent (Step 2.1). If this is the first
+  SUCCESS in the wave, launch the reviewer agent. Otherwise, use SendMessage.
+- If `FAILURE`: report the failure details to the user immediately. Do NOT auto-retry implementation failures — these need human judgment. Do NOT block other tasks' reviews.
 
 **Token tracking:** Record a `TOKEN_LEDGER` entry for each implementer agent (step `2:<task_id>`, e.g., `2:1.1`). Agent: `implementer-agent`, model: as assigned by the plan.
 
@@ -650,6 +660,18 @@ After all implementation is committed and pushed, prompt the user to test the PR
 
 **For each bug reported, run this cycle:**
 
+**Parallel bug fixes:** When the user reports multiple bugs at once, group them by independence:
+- **Independent bugs** have non-overlapping file sets (no shared files to modify). These can be
+  fixed in parallel using worktree isolation (same pattern as Step 2 parallel tasks).
+- **Dependent bugs** share files or have causal relationships. These must be fixed sequentially.
+
+To parallelize: run Step 3.5.1 (ASSESS) for all bugs first. After assessment, identify which
+bugs have non-overlapping FILES TO MODIFY lists. Launch parallel implementer agents (with
+worktree isolation) for independent bugs. Review them using the shared bug-fix reviewer agent
+via SendMessage. Commit in assessment order (not completion order) for deterministic history.
+
+If the user reports bugs one at a time (interactive), process them sequentially as before.
+
 #### 3.5.1: ASSESS
 
 The orchestrator assesses each bug — do NOT delegate this to a subagent:
@@ -752,6 +774,13 @@ Prompt: |
 
 #### 3.5.3: REVIEW
 
+**Reviewer reuse:** Use the same SendMessage pattern as Step 2.1 wave reviews to avoid
+re-ingesting the agent definition and overlays for each bug-fix review. Launch ONE
+code-reviewer agent for the first bug-fix review, then reuse it via SendMessage for subsequent
+bug-fix reviews in the same manual test round.
+
+**First bug-fix review** — launch a fresh reviewer:
+
 ```
 Agent: code-reviewer-agent
 Model: sonnet
@@ -780,10 +809,30 @@ Prompt: |
   <list the files the fix agent modified>
 ```
 
+**Subsequent bug-fix reviews** — reuse the same agent via SendMessage:
+
+```
+SendMessage to: <bug-fix reviewer agent from first review>
+Message: |
+  NEW REVIEW — discard all prior review context. Review ONLY the following changes.
+
+  This is a BUG FIX review. Explicitly verify:
+  - The fix does not revert or contradict the original implementation's intent
+  - The fix does not introduce regressions in adjacent functionality
+  - The test count has not decreased from the baseline
+
+  REVIEW THESE CHANGES:
+
+  <list the files the fix agent modified>
+```
+
+**Cap at 8 reviews per agent** (same as wave reviews). If a manual test round produces more
+than 8 bug-fix reviews, launch a fresh reviewer for reviews 9+.
+
 **Token tracking:** Record `TOKEN_LEDGER` entries for each sub-step of the bug-fix cycle:
 - Blast-radius analysis (if triggered): step `3.5:assess:<bug_id>`, agent: `architect-agent`, model: `sonnet`
 - Bug fix: step `3.5:fix:<bug_id>`, agent: `implementer-agent`, model: `sonnet`, set `is_retry: true`
-- Bug fix review: step `3.5:review:<bug_id>`, agent: `code-reviewer-agent`, model: `sonnet`
+- Bug fix review: step `3.5:review:<bug_id>`, agent: `code-reviewer-agent`, model: `sonnet`. For SendMessage reviews, `input_chars` is the SendMessage content only.
 
 #### 3.5.4: COMMIT + PUSH
 
@@ -829,8 +878,13 @@ The orchestrator does NOT merge — the user decides when to merge.
 
 ### Step 5: TOKEN ANALYSIS (mandatory)
 
-After finalization, analyze the token usage accumulated throughout this pipeline run. This step
-always runs — it is not skippable.
+**Timing:** Launch token analysis **in the background** at the same time as Step 4 finalization.
+The TOKEN_LEDGER is complete after Step 3.5 — it does not depend on PR finalization. This
+overlaps analysis work with ORCHESTRATOR.md updates, PR body updates, and `gh pr ready`,
+reducing wall-clock time. If analysis files a GitHub issue, report it to the user after
+Step 4 completes (or immediately if Step 4 finishes first).
+
+This step always runs — it is not skippable.
 
 #### 5.1: Compute Summary
 

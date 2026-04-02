@@ -36,12 +36,18 @@ Identify the top 3 most expensive steps by total cost.
 
 ### 2. Model Distribution Analysis
 
-Compare actual model usage (by token spend, not call count) against the 70/20/10 target:
-- **Haiku** should be ~70% of total token spend
+Compare actual model usage **by estimated dollar cost** (not call count or raw token count)
+against the 70/20/10 target:
+- **Haiku** should be ~70% of total dollar spend
 - **Sonnet** should be ~20%
 - **Opus** should be ~10%
 
-Flag if any model deviates more than 15 percentage points from its target.
+Compute each model's share as: `model_cost / total_cost × 100`. Report BOTH cost-weighted
+percentages AND call-count percentages — but flag deviations based on the cost metric only.
+Call-count percentages can create a false sense of efficiency (e.g., "69% Haiku calls" while
+Haiku accounts for only 12% of spend).
+
+Flag if any model deviates more than 15 percentage points from its target on the cost metric.
 
 ### 3. Prompt Efficiency Analysis
 
@@ -164,11 +170,11 @@ Use this structure for the issue body:
 
 ## Model Distribution
 
-| Model | Target % | Actual % | Delta | Calls | Cost |
-|-------|----------|----------|-------|-------|------|
-| Haiku | 70% | X% | +/-X% | X | $X.XX |
-| Sonnet | 20% | X% | +/-X% | X | $X.XX |
-| Opus | 10% | X% | +/-X% | X | $X.XX |
+| Model | Target % (cost) | Actual % (cost) | Delta | Calls (%) | Est. Cost |
+|-------|----------------|-----------------|-------|-----------|-----------|
+| Haiku | 70% | X% | +/-Xpp | X (X%) | $X.XX |
+| Sonnet | 20% | X% | +/-Xpp | X (X%) | $X.XX |
+| Opus | 10% | X% | +/-Xpp | X (X%) | $X.XX |
 
 ## Findings
 

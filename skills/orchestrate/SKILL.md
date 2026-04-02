@@ -218,7 +218,7 @@ Step 1a: ANALYZE & CLARIFY (architect-agent, Sonnet, interactive)
     |  Pre-flight check -> seam analysis -> clarifying questions (iterative)
     |  Writes: .claude/tmp/1a-spec.md (enriched spec + recovery artifact)
     v
-Step 1b: PLAN (architect-agent, Opus, fresh agent)
+Step 1b: PLAN (architect-agent, Sonnet default / Opus for novel architecture, fresh agent)
     |  Reads: 1a-spec.md + full ORCHESTRATOR.md (clean context, ~15K tokens)
     |  Produces: ordered task list with context briefs
     |  Present to user for confirmation
@@ -321,9 +321,22 @@ Prompt: |
 
 Launch a **fresh** architect-agent in 1b mode. Do NOT use SendMessage from the 1a agent — start a new agent so 1b has a clean context window (~15K tokens of focused signal vs. the full 1a Q&A history).
 
+**Model selection:** Default to **Sonnet** for Step 1b. Only escalate to **Opus** when the
+1a-spec indicates at least one of:
+- Novel architecture with no existing patterns in the codebase to follow
+- Cross-cutting changes affecting 3+ services/modules with shared state
+- Concurrent/async coordination requiring holistic correctness reasoning
+- Security-critical design where subtle errors have severe consequences
+
+Most feature work — CRUD endpoints, UI components, config changes, test additions,
+mechanical refactors — does not need Opus-level planning. The planner skill's decomposition
+logic works equally well on Sonnet for well-understood problem types. When in doubt, start
+with Sonnet; if the plan quality is poor (vague briefs, missed dependencies), the user can
+request a re-plan with Opus.
+
 ```
 Agent: architect-agent
-Model: opus
+Model: <sonnet (default) or opus (if escalation criteria above are met)>
 Prompt: |
   MODE: 1b — Plan Generation
 
@@ -364,7 +377,7 @@ answers, the agent completes the plan.
 
 Present the plan summary to the user and wait for confirmation before proceeding.
 
-**Token tracking:** Record a `TOKEN_LEDGER` entry for the initial 1b agent launch (step `1b`). If architecture decision questions occur, record the SendMessage round as step `1b:decision`. If plan revisions are requested, record each revision round as step `1b:revision-N`. Agent: `architect-agent`, model: `opus`.
+**Token tracking:** Record a `TOKEN_LEDGER` entry for the initial 1b agent launch (step `1b`). If architecture decision questions occur, record the SendMessage round as step `1b:decision`. If plan revisions are requested, record each revision round as step `1b:revision-N`. Agent: `architect-agent`, model: as selected above (`sonnet` or `opus`).
 
 **Plan revisions:** If the user requests changes, use **SendMessage** to the 1b agent (do NOT launch a new agent — the architect must remember its own plan). Iterate until confirmed.
 
@@ -388,7 +401,13 @@ All subsequent commits and pushes target this branch.
 For each wave in the plan, launch implementer agents. **Tasks within a wave run in parallel.**
 Tasks across waves are sequential (wave N+1 waits for wave N to complete).
 
-For each task in the current wave:
+**Batch cap:** If a wave contains more than 4 tasks assigned to the same model, split them
+into multiple agent calls of at most 4 tasks each. This reduces blast radius (a failure at
+task 3 doesn't require re-running tasks 5-8) and keeps individual agent calls under ~50K
+input tokens. The planner should ideally keep waves to ≤4 tasks, but if it produces larger
+waves, the orchestrator enforces the cap here.
+
+For each task (or batch of up to 4 tasks) in the current wave:
 
 1. Read the task's `Stack:` field from the plan to determine `<task_stack>`.
    If the plan omits the stack field, resolve it from the task's file paths using the

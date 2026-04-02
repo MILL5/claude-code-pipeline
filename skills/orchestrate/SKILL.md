@@ -274,13 +274,16 @@ customized), paste the full file instead of a partial extract.
 User Request
     |
     v
-Step 1a: ANALYZE & CLARIFY (architect-agent, Sonnet, interactive)
-    |  Pre-flight check -> seam analysis -> clarifying questions (iterative)
+Step 1a: FEATURE CLARIFICATION (architect-agent, Sonnet, interactive)
+    |  Pre-flight check -> feature decomposition -> feature-only Q&A (iterative, max 3 rounds)
+    |  Questions: scope, behavior, edge cases, business rules, DoD — NO technical questions
     |  Writes: .claude/tmp/1a-spec.md (enriched spec + recovery artifact)
     v
-Step 1b: PLAN (architect-agent, Sonnet default / Opus for novel architecture, fresh agent)
+Step 1b: IMPLEMENTATION CLARIFICATION & PLAN (architect-agent, Sonnet default / Opus, fresh agent)
     |  Reads: 1a-spec.md + 1b Extract from ORCHESTRATOR.md (clean context, ~12K tokens)
-    |  Produces: ordered task list with context briefs
+    |  Phase 1: Analyze codebase + enriched spec -> implementation Q&A (max 2 rounds)
+    |  Questions: architecture approach, patterns, integration, data modeling, tradeoffs
+    |  Phase 2: Decompose into task plan with context briefs
     |  Present to user for confirmation
     v
 Step 1.5: OPEN PR (open-pr skill)
@@ -430,11 +433,17 @@ Prompt: |
 Note: The 1a-spec already contains project overview, directory structure, fragile areas, and
 current state — the 1b extract omits these to avoid duplication.
 
-**Architecture decision questions:** The 1b agent may pause once to surface implementation
-tradeoffs where both approaches are valid and the choice affects the plan structure (see
-Step 2.5 in the planner skill). If this happens, present the questions to the user and
-feed answers back via **SendMessage**. This is limited to ONE round — after receiving
-answers, the agent completes the plan.
+**Implementation clarification loop:**
+The 1b agent will first analyze the enriched spec against the codebase, then pause to surface
+implementation-specific questions (technical approach, patterns, integration strategy, data
+modeling). See Step 2.5 in the planner skill.
+
+- Present the implementation questions to the user verbatim.
+- Feed user answers back via **SendMessage** to the same agent (do NOT launch a new agent).
+- The agent may ask a second round of follow-up questions if the user's answers reveal new
+  decision points. Maximum TWO rounds total.
+- After receiving answers (or if the agent has no questions), it proceeds to decomposition
+  and plan generation.
 
 **Wait for the plan.** Review it for:
 - Does it respect the file-per-task limits from CLAUDE.md?
@@ -443,7 +452,7 @@ answers, the agent completes the plan.
 
 Present the plan summary to the user and wait for confirmation before proceeding.
 
-**Token tracking:** Record a `TOKEN_LEDGER` entry for the initial 1b agent launch (step `1b`). If architecture decision questions occur, record the SendMessage round as step `1b:decision`. If plan revisions are requested, record each revision round as step `1b:revision-N`. Agent: `architect-agent`, model: as selected above (`sonnet` or `opus`).
+**Token tracking:** Record a `TOKEN_LEDGER` entry for the initial 1b agent launch (step `1b`). If implementation clarification questions occur, record each SendMessage round as step `1b:impl-clarify-N`. If plan revisions are requested, record each revision round as step `1b:revision-N`. Agent: `architect-agent`, model: as selected above (`sonnet` or `opus`).
 
 **Plan revisions:** If the user requests changes, use **SendMessage** to the 1b agent (do NOT launch a new agent — the architect must remember its own plan). Iterate until confirmed.
 

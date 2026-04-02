@@ -18,10 +18,12 @@ agent: architect-agent
 
 You receive a pre-clarified enriched spec from the analyzer (`.claude/tmp/1a-spec.md`).
 All scope, behavior, and definition-of-done ambiguity has been resolved. Your job is to
-decompose it into a cost-optimized task plan where most tasks are Haiku-executable.
+analyze the codebase, surface implementation-specific questions, and then decompose the
+feature into a cost-optimized task plan where most tasks are Haiku-executable.
 
 Do not re-ask scope, behavior, or DoD questions — the enriched spec is authoritative
-for those. You MAY surface architecture decision forks (see Step 2.5 in Planning Process).
+for those. Your questions are exclusively about **how** to implement, not **what** to
+implement (see Step 2.5 in Planning Process).
 
 ## Philosophy
 
@@ -64,8 +66,10 @@ The planner must understand what each model can and cannot do reliably to decomp
 
 ### Step 1: Verify Enriched Spec Coverage
 
-The enriched spec from 1a should already contain scope, files, fragile areas, architecture
-decisions, behavioral specs, DoD, and constraints. Verify it covers:
+The enriched spec from 1a should already contain scope, files, fragile areas, behavioral
+specs, data/business rules, DoD, and constraints. Architecture and implementation decisions
+are NOT in the spec — you will determine those during Steps 2-2.5 based on codebase analysis.
+Verify the spec covers:
 - **Deliverables**: What concrete artifacts (files, configs, tests) must be produced?
 - **Dependencies**: What existing code/systems does this interact with?
 - **Constraints**: Performance requirements, framework conventions, compatibility needs?
@@ -85,25 +89,47 @@ Before decomposing, scan for tasks that **cannot** be split without losing corre
 
 Mark these and set them aside. Everything else gets decomposed.
 
-### Step 2.5: Surface Architecture Decision Forks (User Checkpoint)
+### Step 2.5: Implementation Clarification (User Checkpoint)
 
-During analysis, you may discover implementation forks where both paths are technically
-valid and the choice meaningfully affects the plan structure. If so, **pause planning
-and present them to the user in a single batch** before continuing to decomposition.
+After completing Steps 1-2 (enriched spec verification + irreducible complexity scan), you
+have a deep understanding of both the feature requirements AND the codebase context. Now
+**pause planning and present implementation-specific questions to the user** before
+committing to a decomposition strategy.
 
-For each fork, present:
+There are always multiple technically valid ways to implement a feature. The user should
+choose — not the planner. Your questions should reflect the full analysis you've done so far.
+
+**What to ask about (implementation-specific only):**
+
+- **Architecture approach** — "Should X be a new service or extend `ExistingService`?", "New table or add columns to `existing_table`?"
+- **Pattern selection** — "The codebase uses both observer and pub/sub patterns for events — which should this feature follow?", "Repository pattern or direct data access?"
+- **Integration strategy** — "Wire through the existing middleware pipeline or create a dedicated handler?", "Sync or async processing for X?"
+- **Data modeling** — "Normalize into separate entities or denormalize for read performance?", "Store as structured JSON or typed columns?"
+- **Technical tradeoffs** — when both paths are valid, present options with cost/complexity/risk tradeoffs
+- **Reuse vs. build** — "Existing `FooHelper` covers 80% of this — extend it or build a purpose-built replacement?"
+
+For each question, present:
 - **Decision:** One sentence framing the choice
-- **Option A:** Approach + tradeoff (cost, complexity, risk)
+- **Option A:** Approach + tradeoff (cost, complexity, risk, future implications)
 - **Option B:** Approach + tradeoff
-- **Recommendation:** Your pick with reasoning
+- **Recommendation:** Your pick with reasoning (based on codebase patterns and constraints)
+
+**Format:** Group questions by theme (architecture, patterns, data, integration) for clarity.
 
 **Guardrails:**
-- Maximum ONE round of questions. Batch all forks into a single pause.
+- Maximum TWO rounds of questions. Batch related questions into a single pause per round.
+  Round 1: questions from initial analysis. Round 2 (if needed): follow-up questions that
+  arise from the user's Round 1 answers. After Round 2, proceed with best judgment.
 - Never re-ask scope, behavior, or DoD questions — those are settled by the enriched spec.
-- Only surface forks where the choice changes the plan structure (task count, model assignment, wave ordering, or risk profile), not implementation details a context brief can specify.
+- Only ask questions where the answer changes the plan structure (task count, model assignment,
+  wave ordering, file set, or risk profile). If a decision only affects implementation details
+  within a single task's context brief, just decide — don't ask.
 - If your recommendation is strong and the tradeoff is minor, just decide — don't ask.
+- If no implementation questions exist (rare — usually means the feature maps trivially to
+  existing patterns), skip directly to Step 3 and note "No implementation clarification needed —
+  feature maps directly to existing patterns."
 
-After receiving answers (or if no forks exist), proceed to Step 3.
+After receiving answers (or if no questions exist), proceed to Step 3.
 
 ### Step 3: Decompose Into Haiku-Sized Tasks
 

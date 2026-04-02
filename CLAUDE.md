@@ -61,7 +61,7 @@ Layer 2 (dry-run mode for prompt composition validation) is planned but not yet 
 
 ### Pipeline Flow
 
-User request → **1a: Analyze & Clarify** (Sonnet) → **1b: Plan** (Sonnet default, Opus for novel architecture) → **1.5: Open Draft PR** → **2: Implement** (Haiku per task) → **2.1: Review** (Sonnet) → **2.2: Fix** (Sonnet) → **3: Commit & Push** → **3.5: Manual Test Loop** → **4: Finalize PR** → **5: Token Analysis** (mandatory)
+User request → **1a: Feature Clarification** (Sonnet, feature-only Q&A) → **1b: Implementation Clarification & Plan** (Sonnet default, Opus for novel architecture — implementation-specific Q&A then decomposition) → **1.5: Open Draft PR** → **2: Implement** (Haiku per task) → **2.1: Review** (Sonnet) → **2.2: Fix** (Sonnet) → **3: Commit & Push** → **3.5: Manual Test Loop** → **4: Finalize PR** → **5: Token Analysis** (mandatory)
 
 ### Three Layers
 

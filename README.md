@@ -20,15 +20,18 @@ The pipeline is **tech-stack-agnostic**. The core workflow is identical whether 
 User: "Add feature X" or /orchestrate
     |
     v
-Step 1a: ANALYZE & CLARIFY ──────────────── architect-agent (Sonnet)
-    |  Seam analysis across layers/platforms
+Step 1a: FEATURE CLARIFICATION ──────────── architect-agent (Sonnet)
+    |  Feature decomposition along product seams
     |  Fragile area scan against ORCHESTRATOR.md
-    |  Iterative clarifying questions (max 3 rounds)
+    |  Feature-only Q&A: scope, behavior, business rules (max 3 rounds)
+    |  NO technical/architecture questions — deferred to 1b
     |  Output: .claude/tmp/1a-spec.md (enriched spec)
     v
-Step 1b: PLAN ────────────────────────────── architect-agent (Opus, fresh context)
-    |  Reads enriched spec + ORCHESTRATOR.md (~15K tokens clean)
-    |  Cost-optimized decomposition: >=70% Haiku tasks
+Step 1b: IMPL CLARIFICATION & PLAN ────── architect-agent (Sonnet default / Opus, fresh context)
+    |  Reads enriched spec + 1b Extract from ORCHESTRATOR.md (~12K tokens clean)
+    |  Phase 1: Implementation Q&A after codebase analysis (max 2 rounds)
+    |    Architecture approach, patterns, integration, data modeling, tradeoffs
+    |  Phase 2: Cost-optimized decomposition: >=70% Haiku tasks
     |  Self-contained context briefs per task
     |  Parallel waves with dependency ordering
     |  Output: .claude/tmp/1b-plan.md (recovery artifact)
@@ -177,7 +180,7 @@ The pipeline uses 4 specialized agents, each with a focused role:
 
 | Agent | Default Model | Role |
 |-------|--------------|------|
-| `architect-agent` | Opus | Requirements analysis (1a) and cost-optimized plan generation (1b) |
+| `architect-agent` | Sonnet (1a), Sonnet/Opus (1b) | Feature clarification (1a) and implementation Q&A + plan generation (1b) |
 | `implementer-agent` | Haiku | Executes individual tasks from context briefs. Escalates to Sonnet for fixes. |
 | `code-reviewer-agent` | Sonnet | Aggressive code review with PASS/FAIL protocol |
 | `test-architect-agent` | Haiku | Generates comprehensive test suites for coverage gaps |
@@ -189,8 +192,8 @@ Agents are **generic** — they contain no tech-stack-specific knowledge. Stack 
 | Skill | Trigger | Purpose |
 |-------|---------|---------|
 | `orchestrate` | `/orchestrate`, "implement", "add feature", "fix bug" | Master pipeline coordinator |
-| `architect-analyzer` | Step 1a (via orchestrator) | Requirements clarification and enriched spec generation |
-| `architect-planner` | Step 1b (via orchestrator) | Cost-optimized task decomposition into waves |
+| `architect-analyzer` | Step 1a (via orchestrator) | Feature-only clarification (scope, behavior, business rules) and enriched spec generation |
+| `architect-planner` | Step 1b (via orchestrator) | Implementation Q&A then cost-optimized task decomposition into waves |
 | `build-runner` | "build", "compile", "does it build" | Delegates to adapter's `build.py` script |
 | `test-runner` | "run tests", "check tests", "validate" | Delegates to adapter's `test.py` script |
 | `open-pr` | Step 1.5 (via orchestrator) or "open a PR" | Creates feature branch + draft PR |
@@ -256,9 +259,10 @@ The pipeline is designed to minimize Claude API costs:
 
 - **Haiku for mechanical tasks**: Single-file implementations with fully specified briefs (~$0.005-0.02 per task)
 - **Sonnet for judgment**: Code review, design decisions, multi-file consistency (~$0.03-0.15 per task)
-- **Opus for architecture**: Plan generation, novel algorithm design (~$0.10-0.50 per task)
+- **Opus for complex architecture**: Novel algorithm design, cross-cutting changes, security-critical planning (~$0.10-0.50 per task)
+- **Sonnet-default planning**: Step 1b defaults to Sonnet; Opus reserved for novel architecture or cross-cutting complexity
 - **Clean context windows**: Fresh agents for each pipeline step prevent context accumulation
-- **File-based handoff**: Enriched spec written to disk between 1a and 1b (avoids carrying Q&A history into planning)
+- **File-based handoff**: Enriched spec written to disk between 1a and 1b (avoids carrying feature Q&A history into implementation planning)
 
 A typical feature plan targets **>=70% Haiku tasks**, making the mixed strategy significantly cheaper than running everything on Sonnet or Opus.
 
@@ -294,8 +298,8 @@ claude-code-pipeline/
 |
 |-- skills/                              # Generic skill definitions
 |   |-- orchestrate/SKILL.md             # Master pipeline coordinator
-|   |-- architect-analyzer/SKILL.md      # Step 1a: requirements clarification
-|   |-- architect-planner/SKILL.md       # Step 1b: cost-optimized decomposition
+|   |-- architect-analyzer/SKILL.md      # Step 1a: feature clarification (scope/behavior Q&A)
+|   |-- architect-planner/SKILL.md       # Step 1b: implementation Q&A + cost-optimized decomposition
 |   |-- build-runner/SKILL.md            # Delegates to adapter build script
 |   |-- test-runner/SKILL.md             # Delegates to adapter test script
 |   |-- open-pr/SKILL.md                 # Branch + draft PR creation

@@ -1,0 +1,18 @@
+# Architecture Rules
+
+<!-- This file is injected into the architect agent during planning (Steps 1a and 1b).
+     Add project-specific architectural constraints and design decisions.
+
+     The architect uses these rules when decomposing features into tasks,
+     choosing patterns, and assessing blast radius.
+
+     Examples:
+     - "Services must not import from controllers — dependency flows inward only"
+     - "All new endpoints must go through the middleware chain (auth, rate-limit, logging)"
+     - "Use Redis for caching, not in-memory caches — we run multiple replicas"
+     - "New database tables require a migration file and a rollback migration"
+     - "Feature flags must use the LaunchDarkly SDK, not environment variables"
+     - "Maximum 3 levels of component nesting in the UI layer"
+
+     Delete this comment block and replace with your project's architecture rules.
+     If left empty or comment-only, this file is skipped during injection. -->

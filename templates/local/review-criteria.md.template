@@ -1,0 +1,18 @@
+# Review Criteria
+
+<!-- This file is injected into the reviewer agent (Step 2.1).
+     Add project-specific review criteria beyond the adapter's built-in checklist.
+
+     The adapter already covers language-level review concerns (e.g., React hooks rules,
+     Python GIL issues). Use this file for YOUR project's additional review requirements.
+
+     Examples:
+     - "All public API endpoints must validate authentication and authorization"
+     - "Database queries must be checked for N+1 patterns"
+     - "New components must include aria-label attributes for accessibility"
+     - "Any change to the payment module requires explicit security review notation"
+     - "Error responses must never leak internal implementation details"
+     - "All new dependencies must be justified in the PR description"
+
+     Delete this comment block and replace with your project's review criteria.
+     If left empty or comment-only, this file is skipped during injection. -->

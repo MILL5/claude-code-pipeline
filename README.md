@@ -109,9 +109,10 @@ The init script:
    - Also detects Azure SDK usage in dependencies and activates the `azure-sdk` overlay automatically
    - For multi-stack repos, all detected stacks are activated with auto-generated `stack_paths` mappings
 2. Creates symlinks: `.claude/agents/` -> pipeline agents, `.claude/skills/` -> pipeline skills, `.claude/scripts/<stack>/` -> adapter scripts (one per stack)
-3. Writes `.claude/pipeline.config` with stacks, stack_paths, and pipeline path
+3. Writes `.claude/pipeline.config` with stacks, stack_paths, pipeline_version, and pipeline path
 4. Merges adapter hooks from all active adapters into `.claude/settings.json`
 5. Generates `.claude/CLAUDE.md` and `.claude/ORCHESTRATOR.md` from templates (if they don't exist)
+6. Creates `.claude/local/` with project-specific overlay templates (if they don't exist)
 
 ### 3. Configure your project
 
@@ -119,6 +120,11 @@ Edit the generated files:
 
 - **`.claude/CLAUDE.md`** — Set your developer persona, project description, and any project-specific workflow rules
 - **`.claude/ORCHESTRATOR.md`** — Document your architecture, services, directory structure, conventions, fragile areas, and current build/test status
+- **`.claude/local/`** — Add project-specific standards that get injected into agents:
+  - `project-overlay.md` — Rules for all agents (e.g., "use trunk-based dev, PRs under 400 lines")
+  - `coding-standards.md` — Rules for implementer + reviewer (e.g., "use zod for validation")
+  - `architecture-rules.md` — Rules for architect (e.g., "all DB access through repository layer")
+  - `review-criteria.md` — Rules for reviewer (e.g., "check for N+1 queries on all endpoints")
 
 These are your project's living documentation. The pipeline reads them before every operation.
 
@@ -191,6 +197,7 @@ Agents are **generic** — they contain no tech-stack-specific knowledge. Stack 
 | `summarize-implementation` | After implementation tasks | Generates conventional-commit messages |
 | `token-analysis` | Step 5 (via orchestrator, mandatory) | Analyzes pipeline token usage, files GitHub issues for optimization findings |
 | `fix-defects` | `/fix-defects`, "fix defects", "fix PR defects" | Reads defect reports from PR comments, triages by severity, runs fix pipeline |
+| `update-pipeline` | `/update-pipeline`, "update pipeline" | Updates pipeline submodule, validates, commits bump |
 | `azure-login` | `/azure-login`, auto before Azure-dependent steps | Validates Azure auth, subscription context, RBAC permissions |
 | `validate-bicep` | `/validate-bicep` | Bicep lint + build + optional what-if dry run |
 | `deploy-bicep` | `/deploy-bicep` | Deploy Bicep to Azure with mandatory confirmation gate |
@@ -217,9 +224,31 @@ For each agent launch:
 ```
 
 This means:
-- **Updating the pipeline** (git pull) immediately updates all projects using it
+- **Updating the pipeline** (`/update-pipeline` or git pull) immediately updates all projects using it
 - **Switching stacks** only requires re-running `init.sh --stack=new-stack`
 - **Custom overlays** can be added without modifying core pipeline files
+
+### Local Overlays (Per-Project)
+
+The `.claude/local/` directory holds project-specific standards that get composed into agents alongside adapter and cross-cutting overlays. These are committed to your repo, not the pipeline repo.
+
+| File | Injected Into | Purpose |
+|------|--------------|---------|
+| `project-overlay.md` | All agents | Project-wide rules and conventions |
+| `coding-standards.md` | Implementer + Reviewer | Code style beyond adapter defaults |
+| `architecture-rules.md` | Architect | Architectural constraints and decisions |
+| `review-criteria.md` | Reviewer | Team-specific review checklist |
+
+**Composition order at injection markers:**
+
+```
+Adapter overlay (stack-specific, from pipeline)
+  → Cross-cutting overlay (e.g., azure-sdk, from pipeline)
+    → Local: project-overlay.md (all agents, from your repo)
+      → Local: role-specific file (from your repo)
+```
+
+Local files are created by `init.sh` from templates. They are optional — empty files or files containing only template comments are skipped during injection.
 
 ### Cost Optimization
 
@@ -248,6 +277,7 @@ The pipeline also reduces per-step token consumption through several strategies:
 ```
 claude-code-pipeline/
 |-- init.sh                              # Bootstrap script
+|-- VERSION                              # Pipeline semver (e.g., 1.1.0)
 |-- CLAUDE.md                            # Guidance for Claude Code in this repo
 |-- README.md
 |
@@ -268,6 +298,7 @@ claude-code-pipeline/
 |   |-- summarize-implementation/SKILL.md # Conventional commit messages
 |   |-- token-analysis/SKILL.md          # Step 5: token usage analysis + issue filing
 |   |-- fix-defects/SKILL.md             # Standalone: fix defects from PR comments
+|   |-- update-pipeline/SKILL.md         # Update pipeline submodule with validation
 |   |-- azure-login/SKILL.md             # Azure auth pre-flight validation
 |   |-- validate-bicep/SKILL.md          # Bicep lint + build + what-if
 |   |-- deploy-bicep/SKILL.md            # Deploy with confirmation gate
@@ -373,7 +404,12 @@ claude-code-pipeline/
     |-- CLAUDE.md.template               # Starting point for project CLAUDE.md
     |-- ORCHESTRATOR.md.template         # Starting point for project ORCHESTRATOR.md
     |-- pipeline.config.template         # Config file format reference
-    +-- defect-report.md                # Defect report template for PR comments
+    |-- defect-report.md                # Defect report template for PR comments
+    +-- local/                           # Templates for per-project overlays
+        |-- project-overlay.md.template  # All-agent project standards
+        |-- coding-standards.md.template # Implementer + reviewer standards
+        |-- architecture-rules.md.template # Architect constraints
+        +-- review-criteria.md.template  # Reviewer checklist additions
 ```
 
 ## How-To Guide
@@ -405,6 +441,7 @@ You don't have to use the full pipeline. Individual skills work standalone:
 /open-pr                         # Create a branch + draft PR
 /summarize-implementation        # Generate a commit message from current diff
 /fix-defects                     # Fix defects reported on a PR
+/update-pipeline                 # Update pipeline submodule to latest
 
 # Azure skills (see docs/azure-guide.md for details)
 /azure-login                     # Verify Azure auth and subscription context
@@ -418,6 +455,23 @@ You don't have to use the full pipeline. Individual skills work standalone:
 
 ### Updating the Pipeline
 
+**Recommended:** Use the `/update-pipeline` skill from within Claude Code:
+
+```
+/update-pipeline
+```
+
+This automatically:
+1. Pulls the latest pipeline version from the tracked branch
+2. Shows a changelog of what changed
+3. Re-runs `init.sh` if the bootstrap script changed
+4. Copies any new local overlay templates
+5. Runs structural validation against the new version
+6. Commits the submodule bump (if validation passes)
+7. Offers rollback if validation fails
+
+**Manual update** (if not using the skill):
+
 If cloned directly:
 ```bash
 cd your-project/.claude/pipeline
@@ -427,6 +481,8 @@ git pull origin main
 If using a submodule:
 ```bash
 git submodule update --remote .claude/pipeline
+git add .claude/pipeline
+git commit -m "chore(pipeline): bump pipeline"
 ```
 
 Updates take effect immediately — no re-init needed (symlinks point to the pipeline repo).
@@ -607,6 +663,9 @@ overlays=azure-sdk
 # Capabilities aggregated from active adapters and overlays
 capabilities=azure-auth
 
+# Pipeline version at bootstrap time
+pipeline_version=1.1.0
+
 # Date this config was generated
 initialized=2026-03-29T00:00:00Z
 ```
@@ -618,6 +677,19 @@ Generated by `init.sh` from the adapter's `hooks.json`. Contains PreToolUse hook
 - Block `grep`/`cat`/`find`/`sed` via Bash (forces use of Grep/Read/Glob/Edit tools)
 
 You can add project-specific hooks alongside the pipeline hooks.
+
+### `.claude/local/`
+
+Your project-specific standards, injected into agents at runtime. Unlike CLAUDE.md (which Claude Code reads directly), these files are selectively composed into the right agent at the right pipeline step — more targeted, less token waste.
+
+| File | Agents | When |
+|------|--------|------|
+| `project-overlay.md` | All | Every agent launch |
+| `coding-standards.md` | Implementer, Reviewer | Steps 2, 2.1, 2.2, 3.5 |
+| `architecture-rules.md` | Architect | Steps 1a, 1b, 3.5 blast-radius |
+| `review-criteria.md` | Reviewer | Steps 2.1, 3.5 review |
+
+Empty files are skipped. Keep content concise — these are injected into every relevant agent call and affect token consumption.
 
 ### `.claude/CLAUDE.md`
 
@@ -702,8 +774,14 @@ When writing a custom adapter, run `python3 tests/validate_structure.py` after c
 **Q: Can I use individual agents without the full pipeline?**
 Yes. The agents work standalone. For example, launch `code-reviewer-agent` directly on your recent changes, or use `test-architect-agent` to generate tests for a specific file.
 
+**Q: How do I add project-specific coding standards?**
+Edit `.claude/local/coding-standards.md` with your rules. These get injected into the implementer and reviewer agents automatically. For architecture-level rules, use `architecture-rules.md`; for review-specific criteria, use `review-criteria.md`; for rules that apply to all agents, use `project-overlay.md`.
+
+**Q: How do I update the pipeline?**
+Run `/update-pipeline` from Claude Code. It pulls the latest version, shows what changed, validates structural integrity, and commits the submodule bump. If validation fails, it offers to roll back.
+
 **Q: What if my project uses multiple stacks?**
-The pipeline supports one adapter at a time. For monorepos with multiple stacks, you could either use the dominant stack's adapter or create a custom adapter that combines overlays. Multi-adapter support is a potential future enhancement.
+The pipeline supports multiple adapters simultaneously for multi-stack repos. Use `--stack=react --stack=python` with `init.sh`, or let auto-detection handle it.
 
 **Q: Does the pipeline support CI/CD integration?**
 The pipeline runs locally via Claude Code. It creates PRs that your CI/CD system can pick up normally. The pipeline itself doesn't run in CI.

@@ -120,6 +120,10 @@ def validate_bootstrap(project_dir: Path, result: SmokeResult) -> None:
             result.ok("pipeline.config has pipeline_root")
         else:
             result.fail("pipeline.config has pipeline_root")
+        if "pipeline_version=" in content:
+            result.ok("pipeline.config has pipeline_version")
+        else:
+            result.fail("pipeline.config has pipeline_version")
     else:
         result.fail("pipeline.config exists")
 
@@ -192,6 +196,25 @@ def validate_bootstrap(project_dir: Path, result: SmokeResult) -> None:
     else:
         result.fail("tmp/ directory created")
 
+    # local/ directory and templates
+    local_dir = claude_dir / "local"
+    if local_dir.is_dir():
+        result.ok("local/ directory created")
+        for local_file in ["project-overlay.md", "coding-standards.md",
+                           "architecture-rules.md", "review-criteria.md"]:
+            path = local_dir / local_file
+            if path.exists():
+                content = path.read_text()
+                if len(content) > 10:
+                    result.ok(f"local/{local_file} generated with content")
+                else:
+                    result.fail(f"local/{local_file} generated with content",
+                                f"only {len(content)} chars")
+            else:
+                result.fail(f"local/{local_file} exists")
+    else:
+        result.fail("local/ directory created")
+
     # Verify agent files accessible through symlink
     for agent in ["architect-agent.md", "implementer-agent.md", "code-reviewer-agent.md"]:
         path = claude_dir / "agents" / agent
@@ -208,18 +231,18 @@ def validate_bootstrap(project_dir: Path, result: SmokeResult) -> None:
         else:
             result.fail(f"Skill accessible via symlink: {skill}")
 
-    # Verify scripts accessible
+    # Verify scripts accessible (per-stack layout: scripts/python/build.py)
     for script in ["build.py", "test.py"]:
-        path = claude_dir / "scripts" / script
+        path = claude_dir / "scripts" / "python" / script
         if path.exists():
-            result.ok(f"Script accessible via symlink: {script}")
+            result.ok(f"Script accessible via symlink: python/{script}")
         else:
-            result.fail(f"Script accessible via symlink: {script}")
+            result.fail(f"Script accessible via symlink: python/{script}")
 
 
 def validate_build_script(project_dir: Path, result: SmokeResult) -> None:
     """Run the build script and validate output contract."""
-    script = project_dir / ".claude" / "scripts" / "build.py"
+    script = project_dir / ".claude" / "scripts" / "python" / "build.py"
     if not script.exists():
         result.fail("Build script accessible")
         return
@@ -243,7 +266,7 @@ def validate_build_script(project_dir: Path, result: SmokeResult) -> None:
 
 def validate_test_script(project_dir: Path, result: SmokeResult) -> None:
     """Run the test script and validate output contract."""
-    script = project_dir / ".claude" / "scripts" / "test.py"
+    script = project_dir / ".claude" / "scripts" / "python" / "test.py"
     if not script.exists():
         result.fail("Test script accessible")
         return

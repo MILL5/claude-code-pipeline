@@ -1,0 +1,17 @@
+# Coding Standards
+
+<!-- This file is injected into implementer and reviewer agents.
+     Add project-specific coding rules that go beyond what the adapter provides.
+
+     The adapter already covers language-level conventions (e.g., TypeScript strict mode,
+     Python type hints). Use this file for YOUR project's additional standards.
+
+     Examples:
+     - "Imports must be ordered: stdlib, third-party, local — with blank lines between groups"
+     - "Use zod for all runtime validation, never manual type guards"
+     - "Logger calls must use structured logging: logger.info('msg', { key: value })"
+     - "Database queries must go through the repository layer, never raw SQL in services"
+     - "Prefer composition over inheritance — no class hierarchies deeper than 2 levels"
+
+     Delete this comment block and replace with your project's coding standards.
+     If left empty or comment-only, this file is skipped during injection. -->

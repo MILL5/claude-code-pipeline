@@ -251,7 +251,7 @@ detect_overlays() {
 
         # Skip if already implied
         local already=false
-        for existing in "${overlays[@]}"; do
+        for existing in "${overlays[@]+"${overlays[@]}"}"; do
             [ "$existing" = "$ov_name" ] && already=true && break
         done
         [ "$already" = true ] && continue
@@ -335,6 +335,9 @@ if [ -n "$CAPABILITIES" ]; then
     info "Active capabilities: $CAPABILITIES"
 fi
 
+# Read pipeline version
+PIPELINE_VERSION=$(cat "$PIPELINE_ROOT/VERSION" 2>/dev/null || echo "unknown")
+
 CONFIG_FILE="$CLAUDE_DIR/pipeline.config"
 if [ -f "$CONFIG_FILE" ] && [ "$FORCE" = false ]; then
     info "pipeline.config already exists. Use --force to overwrite."
@@ -359,6 +362,9 @@ overlays=$OVERLAYS
 # Capabilities aggregated from active adapters and overlays
 # Used by skills for conditional behavior (e.g., azure-auth triggers Azure login pre-flight)
 capabilities=$CAPABILITIES
+
+# Pipeline version at bootstrap time
+pipeline_version=$PIPELINE_VERSION
 
 # Date this config was generated
 initialized=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -484,6 +490,23 @@ else
     info "ORCHESTRATOR.md already exists — not overwriting"
 fi
 
+# --- Step 7.5: Generate local overlay templates ---
+LOCAL_DIR="$CLAUDE_DIR/local"
+mkdir -p "$LOCAL_DIR"
+
+for tmpl in project-overlay.md coding-standards.md architecture-rules.md review-criteria.md; do
+    TARGET="$LOCAL_DIR/$tmpl"
+    TEMPLATE="$PIPELINE_ROOT/templates/local/${tmpl}.template"
+    if [ ! -f "$TARGET" ]; then
+        if [ -f "$TEMPLATE" ]; then
+            cp "$TEMPLATE" "$TARGET"
+            info "Generated local/$tmpl from template (edit to customize)"
+        fi
+    else
+        info "local/$tmpl already exists — not overwriting"
+    fi
+done
+
 # --- Step 8: Summary ---
 echo ""
 echo "========================================"
@@ -492,7 +515,7 @@ echo "========================================"
 echo ""
 echo "  Project:    $PROJECT_DIR"
 echo "  Stack(s):   $STACKS_CSV"
-echo "  Pipeline:   $PIPELINE_ROOT"
+echo "  Pipeline:   $PIPELINE_ROOT (v$PIPELINE_VERSION)"
 echo ""
 echo "  Symlinks:"
 echo "    .claude/agents  -> pipeline/agents"
@@ -509,10 +532,12 @@ echo "  Hooks:      .claude/settings.json"
 if [ -n "$OVERLAYS" ]; then
 echo "  Overlays:   $OVERLAYS"
 fi
+echo "  Local:      .claude/local/ (project-specific overlays)"
 echo ""
 echo "  Next steps:"
 echo "    1. Edit .claude/pipeline.config — review stack_paths mappings"
 echo "    2. Edit .claude/CLAUDE.md with your project description"
 echo "    3. Edit .claude/ORCHESTRATOR.md with your architecture"
-echo "    4. Run 'claude' and use /orchestrate to start the pipeline"
+echo "    4. Edit .claude/local/*.md with project-specific standards"
+echo "    5. Run 'claude' and use /orchestrate to start the pipeline"
 echo ""

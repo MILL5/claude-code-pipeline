@@ -103,9 +103,13 @@ The planner's job is to decompose work so Haiku can execute it. Irreducibly comp
 ### Token Optimization
 
 The orchestrator uses several strategies to reduce token consumption:
-- **Scoped ORCHESTRATOR.md extracts**: Each agent receives only the sections it needs (1a gets fragile areas + architecture, 1b gets conventions + data flow, 3.5 gets fragile areas only), not the full file.
+- **Scoped ORCHESTRATOR.md extracts**: Each agent receives only the sections it needs (1a gets fragile areas + architecture, 1b gets only sections NOT already in 1a-spec, 3.5 gets fragile areas only), not the full file. The 1b Extract excludes Architecture and Key Services/Modules since those are already embedded in the 1a-spec.
 - **Essential overlay variants**: Haiku implementers receive a compact rules-only overlay (~500-800 chars) instead of the full overlay (~3,500 chars). The reviewer has the full overlay and catches violations.
-- **Reviewer reuse**: Within a wave, one code-reviewer agent handles all reviews via SendMessage, avoiding re-ingestion of the agent definition and overlay per review (cap: 8 reviews per agent).
+- **Reviewer reuse**: Within a wave, one code-reviewer agent handles all reviews via SendMessage, avoiding re-ingestion of the agent definition and overlay per review (cap: 8 reviews per agent). Bug-fix reviews in Step 3.5 use the same reuse pattern.
+- **Streaming reviews**: Reviews start as soon as each implementer completes, not after the full wave finishes. This overlaps review work with still-running implementer tasks.
+- **Parallel bug fixes**: Independent bugs (non-overlapping file sets) found during manual testing can be fixed in parallel using worktree isolation.
+- **Local overlay comment stripping**: HTML comment blocks are stripped from `.claude/local/` files before injection, so template placeholders don't waste tokens.
+- **Background token analysis**: Step 5 (token analysis) runs in the background concurrently with Step 4 (PR finalization), reducing wall-clock time.
 - **TOKEN_REPORT**: All agents append a `---TOKEN_REPORT---` block to their output reporting files read from disk, tool calls, and self-assessed token consumption. This captures the ~43% of token usage invisible to the orchestrator's prompt-level tracking.
 
 ### Output Protocols

@@ -94,6 +94,24 @@ When clarification is complete, write `.claude/tmp/1a-spec.md` with this exact s
 - [ ] [criterion]
 - [ ] [criterion]
 
+## Planning Complexity
+[Standard | Complex]
+
+Classify as **Standard** if ALL of these hold:
+- Single stack (all files in one adapter's `stack_paths`)
+- <=8 files in scope
+- No novel architecture decisions (all decisions follow established patterns)
+- Zero or one fragile areas affected
+- No security-critical or financial-critical logic
+
+Classify as **Complex** if ANY of these hold:
+- Cross-stack coordination required (files span multiple adapters)
+- >8 files in scope
+- Novel architecture decisions with no established pattern
+- 2+ fragile areas affected
+- Security-critical, financial-critical, or concurrency-critical logic
+- The request explicitly asks for architectural changes (new services, new data flows)
+
 ## Constraints
 - [constraint]
 ```

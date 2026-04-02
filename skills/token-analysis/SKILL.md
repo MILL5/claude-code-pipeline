@@ -36,12 +36,21 @@ Identify the top 3 most expensive steps by total cost.
 
 ### 2. Model Distribution Analysis
 
-Compare actual model usage (by token spend, not call count) against the 70/20/10 target:
-- **Haiku** should be ~70% of total token spend
+Compare actual model usage against the 70/20/10 target. **Distribution MUST be measured by
+estimated cost, not by call count.** Call-count percentages are misleading because model pricing
+differs by up to 15x (Haiku $1/$5 vs Opus $15/$75). A pipeline with 69% Haiku calls but only
+12% Haiku cost is not achieving the target — the cost distribution is the authoritative metric.
+
+- **Haiku** should be ~70% of total estimated **cost**
 - **Sonnet** should be ~20%
 - **Opus** should be ~10%
 
 Flag if any model deviates more than 15 percentage points from its target.
+
+Additionally, if the call-count distribution differs from the cost distribution by more than
+20 percentage points on any model, include a **"Misleading call-count distribution"** note in
+the findings. Example: "Haiku accounts for 69% of agent calls but only 12% of cost — call-count
+metrics overstate Haiku utilization."
 
 ### 3. Prompt Efficiency Analysis
 

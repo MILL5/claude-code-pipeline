@@ -138,14 +138,28 @@ A context brief includes:
 3. **Inputs**: What files, types, interfaces this task depends on (provide the actual code/signatures, not references to other tasks)
 4. **Output specification**: Exact public API, method signatures, expected behavior
 5. **Constraints**: Naming conventions, patterns to follow, error handling approach. For Haiku tasks, embed the 1-2 most relevant rules from the adapter's `implementer-overlay-essential.md` that apply to this specific task (e.g., "Cleanup all effects in useEffect return function" for a component with side effects, or "Use `raise ... from e` to preserve exception chains" for error handling code). This makes the brief self-contained and targeted — the implementer does not need to scan the full overlay.
-6. **Verification**: How to know the task is done correctly (build and test commands)
+6. **Verification**: How to know the task is done correctly — use the stack-specific build and test commands: `python3 .claude/scripts/<stack>/build.py` and `python3 .claude/scripts/<stack>/test.py`
 7. **Anti-patterns**: Common mistakes to avoid for this specific task (1-2 max)
 
 **Critical rule**: A context brief must be *self-contained*. Haiku should never need to read another task's brief to execute this one. If task B depends on task A's output, task B's brief must include the relevant interface/contract inline, not "see task A."
 
-### Step 5: Assign Models and Estimate
+**Brief size rule**: Context briefs must contain **signatures and contracts**, NOT full file contents. If the implementer needs to read a file, list it in the brief's File(s) section — do not paste the entire file into the brief. Inline only the specific types, interfaces, and function signatures the task depends on. This keeps briefs lean and prevents oversized prompts.
 
-For each task, assign a model using these rules:
+### Step 5: Assign Models, Stacks, and Estimate
+
+For each task, assign a **stack** and a **model**.
+
+**Stack assignment:** Use the STACK MAPPING provided by the orchestrator to match each task's
+file path(s) to a stack. This determines which adapter overlay and build/test scripts the
+implementer receives.
+
+- Match the task's primary file path against the `stack_paths` patterns (first match wins).
+- If a task touches files from multiple stacks, assign the stack of the primary file being
+  created/modified. If the task truly requires cross-stack coordination (e.g., wiring a
+  React component to a Python API), split it into separate per-stack tasks.
+- If only one stack is configured, all tasks get that stack.
+
+**Model assignment:** For each task, assign a model using these rules:
 
 | Task characteristics | Model | Typical cost |
 |---------------------|-------|-------------|
@@ -154,6 +168,8 @@ For each task, assign a model using these rules:
 | Irreducibly complex: novel algorithm, concurrent correctness, architectural decisions | **Opus** | ~$0.10-0.50 |
 
 **Cost check**: After assignment, compute the estimated total cost. Compare against "what if we ran everything on Sonnet" and "what if we ran everything on Opus." The mixed strategy should be meaningfully cheaper.
+
+**Output conciseness**: The plan overview should be <=300 tokens (~1,200 chars). Each context brief's prose (excluding inlined code/signatures) should be <=400 tokens (~1,600 chars). Verbose briefs waste tokens at the implementer — every extra token in a brief is paid at the implementer's model rate. Be precise, not exhaustive.
 
 ### Step 6: Define Execution Order
 
@@ -166,6 +182,11 @@ Wave 2 (parallel): [Task D - Haiku, needs A+C] [Task E - Haiku, needs B]
          | sync |
 Wave 3 (sequential): [Task F - Haiku, integration test, needs D+E]
 ```
+
+**Batch size awareness:** The orchestrator caps implementer call batches at **4 tasks maximum**.
+If a wave has >4 tasks of the same model, the orchestrator will auto-split into sub-batches of 4.
+Plan accordingly — ensure tasks within a wave are truly independent so sub-batching is safe.
+If tasks within a wave have implicit ordering dependencies, split them into separate waves instead.
 
 ## Output Format
 
@@ -187,6 +208,13 @@ The plan MUST be output as a structured document following this exact format:
 | *All-Sonnet comparison* | | | | *$X.XX* |
 | *All-Opus comparison*   | | | | *$X.XX* |
 
+## Stack Distribution
+| Stack | Task Count | Files |
+|-------|-----------|-------|
+| react | X         | src/frontend/... |
+| python| X         | src/backend/... |
+| bicep | X         | infra/... |
+
 ## Execution Waves
 
 ### Wave 1: [Description]
@@ -195,7 +223,7 @@ The plan MUST be output as a structured document following this exact format:
 ---
 
 #### Task 1.1: [Descriptive Name]
-**Model:** Haiku | **Est. output:** ~X lines | **File(s):** `path/to/File`
+**Model:** Haiku | **Stack:** react | **Est. output:** ~X lines | **File(s):** `path/to/File`
 
 **Context Brief:**
 > **Objective:** [One sentence]
@@ -213,7 +241,7 @@ The plan MUST be output as a structured document following this exact format:
 > **Constraints:**
 > - [naming, patterns, error handling]
 >
-> **Verification:** `python3 .claude/scripts/build.py` succeeds, then `python3 .claude/scripts/test.py` passes with >=90% coverage
+> **Verification:** `python3 .claude/scripts/react/build.py` succeeds, then `python3 .claude/scripts/react/test.py` passes with >=90% coverage
 >
 > **Anti-patterns:**
 > - [what NOT to do]
@@ -221,7 +249,7 @@ The plan MUST be output as a structured document following this exact format:
 ---
 
 #### Task 1.2: [Descriptive Name]
-**Model:** Sonnet | **Est. output:** ~X lines | **File(s):** `path/to/File`
+**Model:** Sonnet | **Stack:** python | **Est. output:** ~X lines | **File(s):** `path/to/File`
 **Escalation reason:** [Why this can't be Haiku]
 
 **Context Brief:**
@@ -261,6 +289,16 @@ Before finalizing the plan, verify each task against these criteria:
 - [ ] OR concurrent/async correctness that requires holistic reasoning
 - [ ] OR security/financial-critical logic where subtle errors have severe consequences
 - [ ] The cost of an Opus task is justified by the cost of getting it wrong
+
+**Wave ordering validation** — verify before finalizing:
+- [ ] Test tasks for a component are in the **same wave or a later wave** than the component implementation task. A test task is any task whose primary output is a test file (filename contains `test`, `spec`, or `Test`).
+- [ ] If a test task depends on a component that hasn't been implemented yet, it will fail — and the retry cost exceeds the cost of correct ordering. Move it to a later wave.
+- [ ] Integration test tasks (tasks that verify cross-component wiring) are in the final wave.
+
+**Context brief size gate** — verify each brief's estimated input footprint:
+- [ ] Haiku briefs: estimated total input < **4,000 tokens** (brief prose + inlined signatures + essential overlay ~200 tokens + agent boilerplate ~500 tokens). If over, trim: remove file dumps, inline only the signatures the task uses, compress examples.
+- [ ] Sonnet briefs: estimated total input < **6,000 tokens** (brief prose + inlined signatures + full overlay ~900 tokens + agent boilerplate ~500 tokens). If over, same trimming.
+- [ ] No brief pastes full file contents — only signatures, types, and contracts are inlined.
 
 ## Common Mistakes to Avoid
 

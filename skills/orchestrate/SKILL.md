@@ -213,9 +213,14 @@ Prompt: |
 
 Launch a **fresh** architect-agent in 1b mode. Do NOT use SendMessage from the 1a agent — start a new agent so 1b has a clean context window (~15K tokens of focused signal vs. the full 1a Q&A history).
 
+**Planning model selection:** Read the `## Planning Complexity` section from `.claude/tmp/1a-spec.md`:
+- **Standard** → launch 1b with **Sonnet**. Well-understood features don't need Opus-level reasoning for planning — Sonnet produces equivalent quality plans at ~80% lower cost.
+- **Complex** → launch 1b with **Opus**. Cross-stack, novel architecture, or high-risk features benefit from Opus's deeper reasoning.
+- **Missing field** → default to **Opus** (backward compatibility with specs written before this classification existed).
+
 ```
 Agent: architect-agent
-Model: opus
+Model: <sonnet if Standard, opus if Complex — see planning model selection above>
 Prompt: |
   MODE: 1b — Plan Generation
 
@@ -247,7 +252,7 @@ answers, the agent completes the plan.
 
 Present the plan summary to the user and wait for confirmation before proceeding.
 
-**Token tracking:** Record a `TOKEN_LEDGER` entry for the initial 1b agent launch (step `1b`). If architecture decision questions occur, record the SendMessage round as step `1b:decision`. If plan revisions are requested, record each revision round as step `1b:revision-N`. Agent: `architect-agent`, model: `opus`.
+**Token tracking:** Record a `TOKEN_LEDGER` entry for the initial 1b agent launch (step `1b`). If architecture decision questions occur, record the SendMessage round as step `1b:decision`. If plan revisions are requested, record each revision round as step `1b:revision-N`. Agent: `architect-agent`, model: as selected by the planning model selection above (sonnet or opus).
 
 **Plan revisions:** If the user requests changes, use **SendMessage** to the 1b agent (do NOT launch a new agent — the architect must remember its own plan). Iterate until confirmed.
 
@@ -291,6 +296,17 @@ Prompt: |
 
   <paste the context brief from the architect's plan here>
 ```
+
+**Batch size cap:** If the plan groups multiple tasks into a single implementer call (e.g.,
+"Task 3.1-3.8"), split into sub-batches of **at most 4 tasks** per implementer agent. Each
+sub-batch gets its own agent launch. Sub-batches within a wave still run in parallel. This
+reduces blast radius — a failure at task 3 of 8 no longer requires re-running all 8.
+
+**Brief size warning:** Before composing each implementer prompt, estimate the total input
+tokens: `(brief_chars + overlay_chars + agent_boilerplate_chars) / 4`. If a single-task call
+exceeds 8,000 estimated input tokens, record `oversized_brief` in the TOKEN_LEDGER `notes`
+field for that entry. Do not block execution — the warning creates a data trail for the
+token analysis step.
 
 **Overlay selection rationale:** Haiku tasks receive only the essential rules (~500-800 chars)
 to maximize signal-to-noise ratio. The reviewer in Step 2.1 has the full overlay and will catch
@@ -586,7 +602,8 @@ Record `PIPELINE_END` as the current timestamp. Compute `TOKEN_SUMMARY` from the
 - **Step breakdown**: for each step prefix (1a, 1b, 1.5, 2, 2.1, 2.2, 3.5) — call count, total
   input tokens, total output tokens
 - **Estimated cost**: using pricing Haiku $1/$5, Sonnet $3/$15, Opus $15/$75 per M tokens (in/out)
-- **Actual model distribution**: percentage of total token spend per model vs. the 70/20/10 target
+- **Cost-weighted model distribution** (primary metric): percentage of total estimated *cost* per model vs. the 70/20/10 target. This is the authoritative distribution metric — call-count percentages can be misleading when model pricing differs by 15x.
+- **Call-count model distribution** (secondary): percentage of agent calls per model (for reference only — do not use for efficiency claims)
 - **Escalation count**: entries where `is_escalation` is true
 - **Retry count**: entries where `is_retry` is true
 

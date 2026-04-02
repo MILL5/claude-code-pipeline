@@ -61,7 +61,7 @@ Layer 2 (dry-run mode for prompt composition validation) is planned but not yet 
 
 ### Pipeline Flow
 
-User request → **1a: Analyze & Clarify** (Sonnet) → **1b: Plan** (Opus) → **1.5: Open Draft PR** → **2: Implement** (Haiku per task) → **2.1: Review** (Sonnet) → **2.2: Fix** (Sonnet) → **3: Commit & Push** → **3.5: Manual Test Loop** → **4: Finalize PR** → **5: Token Analysis** (mandatory)
+User request → **1a: Analyze & Clarify** (Sonnet) → **1b: Plan** (Sonnet default, Opus for novel architecture) → **1.5: Open Draft PR** → **2: Implement** (Haiku per task) → **2.1: Review** (Sonnet) → **2.2: Fix** (Sonnet) → **3: Commit & Push** → **3.5: Manual Test Loop** → **4: Finalize PR** → **5: Token Analysis** (mandatory)
 
 ### Three Layers
 
@@ -95,14 +95,18 @@ Conditional pipeline behavior (e.g., Azure authentication pre-flight) is driven 
 ### Model Assignment Strategy
 
 - **Haiku** (~70%): Single-file, fully-specified mechanical tasks via implementer-agent and test-architect-agent
-- **Sonnet** (~20%): Judgment tasks — code review, design decisions, fixes, analysis (step 1a)
-- **Opus** (~10%): Architecture and planning (step 1b)
+- **Sonnet** (~25%): Judgment tasks — code review, design decisions, fixes, analysis (step 1a), and planning for routine features (step 1b default)
+- **Opus** (~5%): Planning for novel architecture, cross-cutting changes, or security-critical design (step 1b escalation only)
 
-The planner's job is to decompose work so Haiku can execute it. Irreducibly complex tasks (algorithms, security, concurrency) escalate to Sonnet/Opus.
+The planner's job is to decompose work so Haiku can execute it. Irreducibly complex tasks (algorithms, security, concurrency) escalate to Sonnet/Opus. Step 1b defaults to Sonnet — Opus is reserved for cases where the 1a-spec indicates novel architecture or cross-cutting complexity.
 
 ### Token Optimization
 
 The orchestrator uses several strategies to reduce token consumption:
+- **Sonnet-default planning**: Step 1b defaults to Sonnet instead of Opus, reducing planning cost by ~5x for routine features. Opus is reserved for novel architecture or cross-cutting complexity.
+- **Brief-size gate**: The planner enforces token limits on context briefs (Haiku: 3K, Sonnet: 6K, Opus: 8K). Oversized briefs must be trimmed or split before implementation.
+- **Wave batch cap**: Waves are capped at 4 tasks. The orchestrator splits larger waves into batches of ≤4, reducing blast radius and keeping agent calls under ~50K tokens.
+- **Plan output budget**: Context briefs are capped at 400 tokens each; total plan output targets ≤4,000 tokens for ≤15-task features.
 - **Scoped ORCHESTRATOR.md extracts**: Each agent receives only the sections it needs (1a gets fragile areas + architecture, 1b gets only sections NOT already in 1a-spec, 3.5 gets fragile areas only), not the full file. The 1b Extract excludes Architecture and Key Services/Modules since those are already embedded in the 1a-spec.
 - **Essential overlay variants**: Haiku implementers receive a compact rules-only overlay (~500-800 chars) instead of the full overlay (~3,500 chars). The reviewer has the full overlay and catches violations.
 - **Reviewer reuse**: Within a wave, one code-reviewer agent handles all reviews via SendMessage, avoiding re-ingestion of the agent definition and overlay per review (cap: 8 reviews per agent). Bug-fix reviews in Step 3.5 use the same reuse pattern.
@@ -110,6 +114,7 @@ The orchestrator uses several strategies to reduce token consumption:
 - **Parallel bug fixes**: Independent bugs (non-overlapping file sets) found during manual testing can be fixed in parallel using worktree isolation.
 - **Local overlay comment stripping**: HTML comment blocks are stripped from `.claude/local/` files before injection, so template placeholders don't waste tokens.
 - **Background token analysis**: Step 5 (token analysis) runs in the background concurrently with Step 4 (PR finalization), reducing wall-clock time.
+- **Cost-weighted distribution tracking**: Token analysis reports model distribution by dollar cost, not call count, preventing misleading metrics (e.g., "69% Haiku calls" masking 12% cost share).
 - **TOKEN_REPORT**: All agents append a `---TOKEN_REPORT---` block to their output reporting files read from disk, tool calls, and self-assessed token consumption. This captures the ~43% of token usage invisible to the orchestrator's prompt-level tracking.
 
 ### Output Protocols

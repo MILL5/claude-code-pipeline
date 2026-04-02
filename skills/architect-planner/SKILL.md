@@ -179,6 +179,11 @@ Wave 2 (parallel): [Task D - Haiku, needs A+C] [Task E - Haiku, needs B]
 Wave 3 (sequential): [Task F - Haiku, integration test, needs D+E]
 ```
 
+**Wave sizing:** Keep each wave to a maximum of **4 tasks**. If more than 4 independent tasks
+exist at the same dependency level, split them into separate waves (e.g., Wave 1a and Wave 1b).
+This keeps individual agent calls under ~50K input tokens and reduces blast radius — a failure
+in one batch doesn't require re-running the other batch.
+
 ## Output Format
 
 The plan MUST be output as a structured document following this exact format:
@@ -266,6 +271,23 @@ The plan MUST be output as a structured document following this exact format:
 
 Before finalizing the plan, verify each task against these criteria:
 
+**Brief size gate** — estimate the token count of each context brief (1 token ≈ 4 characters).
+Flag any brief that would exceed these thresholds:
+
+| Model | Max brief tokens | Action if exceeded |
+|-------|------------------|--------------------|
+| Haiku | 3,000 | Decompose further or trim unnecessary context |
+| Sonnet | 6,000 | Trim — remove file dumps, inline only the signatures/types needed |
+| Opus | 8,000 | Acceptable only if the task is genuinely irreducible |
+
+Common causes of oversized briefs:
+- Pasting full file contents instead of the relevant interface/types
+- Including background context the implementer doesn't need to act on
+- Duplicating information already in the adapter overlay
+
+If a brief exceeds its threshold, do NOT proceed — either split the task or reduce the brief
+to only what the implementer needs to produce code.
+
 **Haiku readiness checklist** — read `.claude/agents/implementer-contract.md` for the canonical
 6-point contract. Every Haiku task must pass ALL items in that contract.
 
@@ -280,6 +302,13 @@ Before finalizing the plan, verify each task against these criteria:
 - [ ] OR concurrent/async correctness that requires holistic reasoning
 - [ ] OR security/financial-critical logic where subtle errors have severe consequences
 - [ ] The cost of an Opus task is justified by the cost of getting it wrong
+
+**Wave-ordering validation** — verify these sequencing rules before finalizing:
+- [ ] A test task for component X is in the **same wave or a later wave** than the
+  implementation task for X. Placing a test before its component causes guaranteed retry waste.
+- [ ] Tasks that produce interfaces consumed by other tasks are in an earlier wave than
+  their consumers.
+- [ ] Integration test tasks are in the final wave, after all component tasks complete.
 
 ## Common Mistakes to Avoid
 
@@ -316,6 +345,23 @@ Sometimes the planner can't fully specify a task because it depends on runtime d
 **Haiku limits:** Keep output <150 lines. Make ALL conventions explicit. If >3 edge cases, split or escalate.
 
 **Pricing:** Haiku $1/$5, Sonnet $3/$15, Opus $15/$75 per M tokens (in/out). A plan with 20 Haiku tasks ~ 4 Sonnet tasks ~ 1.3 Opus tasks.
+
+## Output Budget
+
+The plan's total output is expensive — at Opus rates, every 1,000 output tokens costs $0.075.
+Apply these limits to keep planning costs proportional to implementation costs:
+
+- **Context briefs**: max 400 tokens each. Lead with the objective and output spec; omit
+  background the implementer doesn't need. If a brief requires more than 400 tokens, the task
+  may need further decomposition.
+- **Overview section**: max 200 tokens. State what is being built and the key constraint — no
+  background essays.
+- **Risk notes**: max 100 tokens. Only include genuine risks, not boilerplate.
+- **Total plan output**: target under 4,000 tokens for features with ≤15 tasks. For larger
+  plans, scale linearly (~250 tokens per additional task).
+
+These limits apply to the plan output text only — inline code snippets in context briefs
+(type definitions, signatures) do not count against the token budget.
 
 ## Plan Persistence
 

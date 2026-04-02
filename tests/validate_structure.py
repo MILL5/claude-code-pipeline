@@ -84,6 +84,7 @@ REQUIRED_SKILLS = [
     "infra-test-runner/SKILL.md",
     "azure-drift-check/SKILL.md",
     "azure-login/SKILL.md",
+    "update-pipeline/SKILL.md",
 ]
 
 ESSENTIAL_OVERLAY_MAX_CHARS = 1000
@@ -190,7 +191,11 @@ def check_required_files(result: ValidationResult) -> None:
             result.fail(f"Missing skill: {skill}")
 
     for template in ["CLAUDE.md.template", "ORCHESTRATOR.md.template",
-                      "pipeline.config.template", "defect-report.md"]:
+                      "pipeline.config.template", "defect-report.md",
+                      "local/project-overlay.md.template",
+                      "local/coding-standards.md.template",
+                      "local/architecture-rules.md.template",
+                      "local/review-criteria.md.template"]:
         path = PIPELINE_ROOT / "templates" / template
         if path.exists():
             result.ok(f"Template exists: {template}")
@@ -441,6 +446,44 @@ def check_init_script(result: ValidationResult) -> None:
             result.ok(f"init.sh: {desc}")
         else:
             result.fail(f"init.sh: does not appear to {desc}")
+
+
+def check_version_file(result: ValidationResult) -> None:
+    """Pipeline must have a VERSION file with a semver string."""
+    version_path = PIPELINE_ROOT / "VERSION"
+    if not version_path.exists():
+        result.fail("VERSION file exists")
+        return
+
+    content = version_path.read_text().strip()
+    if re.match(r"^\d+\.\d+\.\d+$", content):
+        result.ok(f"VERSION file contains valid semver: {content}")
+    else:
+        result.fail(f"VERSION file has invalid format: '{content}' (expected X.Y.Z)")
+
+
+def check_orchestrate_local_overlay_loading(result: ValidationResult) -> None:
+    """Orchestrate must document local overlay loading from .claude/local/."""
+    orchestrate_path = PIPELINE_ROOT / "skills" / "orchestrate" / "SKILL.md"
+    if not orchestrate_path.exists():
+        return
+
+    content = orchestrate_path.read_text()
+
+    if ".claude/local/" in content:
+        result.ok("Orchestrate documents local overlay loading")
+    else:
+        result.fail("Orchestrate missing local overlay loading documentation")
+
+    if "LOCAL_OVERLAYS" in content:
+        result.ok("Orchestrate defines LOCAL_OVERLAYS registry")
+    else:
+        result.fail("Orchestrate missing LOCAL_OVERLAYS registry definition")
+
+    if "Project:" in content:
+        result.ok("Orchestrate documents project overlay composition headers")
+    else:
+        result.fail("Orchestrate missing project overlay composition headers")
 
 
 def check_agent_frontmatter(result: ValidationResult) -> None:
@@ -754,6 +797,8 @@ def run_all_checks(verbose: bool = False) -> ValidationResult:
         ("TOKEN_LEDGER schema", check_orchestrate_token_ledger),
         ("Reviewer reuse", check_orchestrate_reviewer_reuse),
         ("init.sh", check_init_script),
+        ("Version file", check_version_file),
+        ("Orchestrate local overlay loading", check_orchestrate_local_overlay_loading),
         ("Agent frontmatter", check_agent_frontmatter),
         ("Skill frontmatter", check_skill_frontmatter),
         ("Cross-references", check_cross_references),

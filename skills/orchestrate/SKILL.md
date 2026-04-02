@@ -108,7 +108,64 @@ After loading adapters, check `pipeline.config` for the `overlays` key:
 5. The overlay's reviewer content is appended after the adapter's reviewer overlay in Step 2.1,
    giving the code reviewer awareness of both stack-specific and Azure SDK patterns.
 
-## Step 0.2: Azure Authentication Pre-Flight
+## Step 0.2: Load Local Overlays
+
+After loading cross-cutting overlays, check for project-specific local overlays in `.claude/local/`:
+
+1. Check if `.claude/local/` directory exists. If not, skip this step.
+2. Read the following files (if they exist — each is optional):
+   - `.claude/local/project-overlay.md` — injected into ALL agents
+   - `.claude/local/coding-standards.md` — injected into implementer + reviewer agents
+   - `.claude/local/architecture-rules.md` — injected into architect agent
+   - `.claude/local/review-criteria.md` — injected into reviewer agent
+
+3. Build a **LOCAL_OVERLAYS** registry:
+   ```
+   LOCAL_OVERLAYS = {
+     all: <project-overlay.md content or empty>,
+     implementer: <coding-standards.md content or empty>,
+     architect: <architecture-rules.md content or empty>,
+     reviewer: <review-criteria.md content or empty>,
+   }
+   ```
+
+4. When composing agent prompts, **append** local overlay content AFTER cross-cutting
+   overlays at the same `<!-- ADAPTER:TECH_STACK_CONTEXT -->` marker. Use this format:
+
+   ```
+   <adapter overlay content>
+
+   ---
+   ## Cross-Cutting: <name> Context
+   <cross-cutting overlay content>
+
+   ---
+   ## Project: Local Standards
+   <project-overlay.md content>
+
+   ---
+   ## Project: Coding Standards
+   <coding-standards.md content>
+   ```
+
+5. **Composition order by agent role:**
+
+   | Agent Role | Local overlays injected |
+   |------------|------------------------|
+   | Architect (1a, 1b) | `project-overlay.md` + `architecture-rules.md` |
+   | Implementer (2, 2.2, 3.5) | `project-overlay.md` + `coding-standards.md` |
+   | Reviewer (2.1, 3.5) | `project-overlay.md` + `coding-standards.md` + `review-criteria.md` |
+   | Test architect | `project-overlay.md` |
+
+6. **For Haiku tasks:** Include local overlays at full content (not truncated). Local overlays
+   are project-specific and team-curated, so they should be concise by nature. If a local
+   overlay exceeds 500 characters, consider trimming — the pipeline does not enforce a size
+   limit on local overlays, but bloated overlays degrade Haiku signal-to-noise ratio.
+
+7. **If all local overlay files are empty or contain only HTML comments:** Skip injection
+   entirely — do not add empty `## Project:` headers.
+
+## Step 0.3: Azure Authentication Pre-Flight
 
 **When to run:** If `ACTIVE_CAPABILITIES` includes `azure-auth`, AND the pipeline will
 perform Azure-dependent operations (what-if, deploy, drift-check, infra-test).
@@ -140,7 +197,7 @@ If the target subscription or resource group changes mid-pipeline, re-validate.
 **Timing:** This check runs lazily — only before the first Azure-dependent step, not at pipeline
 start. This avoids blocking developers who are only doing local build/lint/review cycles.
 
-## Step 0.5: Initialize Token Tracking
+## Step 0.6: Initialize Token Tracking
 
 Immediately after loading the adapter, initialize the `TOKEN_LEDGER` — an in-session list that
 accumulates token usage data for every agent call throughout the pipeline. Also record
@@ -174,7 +231,7 @@ accumulates token usage data for every agent call throughout the pipeline. Also 
 3. If the TOKEN_REPORT is missing or malformed, leave those fields empty — do not fail.
 4. Append the entry to `TOKEN_LEDGER`.
 
-## Step 0.6: Prepare ORCHESTRATOR.md Extracts
+## Step 0.7: Prepare ORCHESTRATOR.md Extracts
 
 Read `.claude/ORCHESTRATOR.md` once at pipeline start. Instead of pasting the full file into
 every agent prompt, extract only the sections each agent needs. Parse by `##` headers and
@@ -289,6 +346,9 @@ Prompt: |
 
   <append cross-cutting overlays under "## Cross-Cutting: <name> Context" headers>
 
+  <append local overlays: LOCAL_OVERLAYS.all under "## Project: Local Standards",
+   LOCAL_OVERLAYS.architect under "## Project: Architecture Rules" — skip if empty>
+
   STACK MAPPING (for awareness during analysis):
   <for each stack, list its stack_paths patterns, e.g.:
    - react: src/frontend/**
@@ -299,7 +359,7 @@ Prompt: |
   "<user's request verbatim>"
 
   CODEBASE CONTEXT (ORCHESTRATOR.md 1a extract — do not re-read from disk):
-  <paste 1a Extract from Step 0.6>
+  <paste 1a Extract from Step 0.7>
 ```
 
 **Clarification loop:**
@@ -348,6 +408,9 @@ Prompt: |
 
   <append cross-cutting overlays under "## Cross-Cutting: <name> Context" headers>
 
+  <append local overlays: LOCAL_OVERLAYS.all under "## Project: Local Standards",
+   LOCAL_OVERLAYS.architect under "## Project: Architecture Rules" — skip if empty>
+
   STACK MAPPING (for task assignment — assign each task a stack based on its files):
   <for each stack, list its stack_paths patterns, e.g.:
    - react: src/frontend/**
@@ -358,7 +421,7 @@ Prompt: |
   <paste full contents of .claude/tmp/1a-spec.md>
 
   CODEBASE CONTEXT (ORCHESTRATOR.md 1b extract — do not re-read from disk):
-  <paste 1b Extract from Step 0.6>
+  <paste 1b Extract from Step 0.7>
 ```
 
 Note: The 1a-spec already contains project overview, directory structure, fragile areas, and
@@ -431,6 +494,9 @@ Prompt: |
 
   <append cross-cutting overlays (essential or full, matching model)>
 
+  <append local overlays: LOCAL_OVERLAYS.all under "## Project: Local Standards",
+   LOCAL_OVERLAYS.implementer under "## Project: Coding Standards" — skip if empty>
+
   BUILD COMMAND: python3 .claude/scripts/<task_stack>/build.py
   TEST COMMAND: python3 .claude/scripts/<task_stack>/test.py
 
@@ -481,6 +547,10 @@ Prompt: |
 
   <append cross-cutting overlays under "## Cross-Cutting: <name> Review Rules" headers>
 
+  <append local overlays: LOCAL_OVERLAYS.all under "## Project: Local Standards",
+   LOCAL_OVERLAYS.implementer under "## Project: Coding Standards",
+   LOCAL_OVERLAYS.reviewer under "## Project: Review Criteria" — skip if empty>
+
   REVIEW THESE CHANGES:
 
   <list the files the implementer created/modified>
@@ -524,6 +594,9 @@ Prompt: |
   <paste STACK_REGISTRY[<task_stack>].implementer overlay (full — fixes always get full overlay)>
 
   <append cross-cutting overlays>
+
+  <append local overlays: LOCAL_OVERLAYS.all under "## Project: Local Standards",
+   LOCAL_OVERLAYS.implementer under "## Project: Coding Standards" — skip if empty>
 
   BUILD COMMAND: python3 .claude/scripts/<task_stack>/build.py
   TEST COMMAND: python3 .claude/scripts/<task_stack>/test.py
@@ -606,6 +679,9 @@ Prompt: |
 
   <append cross-cutting overlays>
 
+  <append local overlays: LOCAL_OVERLAYS.all under "## Project: Local Standards",
+   LOCAL_OVERLAYS.architect under "## Project: Architecture Rules" — skip if empty>
+
   A bug was found during manual testing of a feature implementation. Assess the
   blast radius of fixing this bug and recommend a fix approach.
 
@@ -619,7 +695,7 @@ Prompt: |
   <paste the plan overview — waves and task names, not full briefs>
 
   CODEBASE CONTEXT (ORCHESTRATOR.md 3.5 extract — do not re-read from disk):
-  <paste 3.5 Extract from Step 0.6>
+  <paste 3.5 Extract from Step 0.7>
 
   Respond with:
   1. ROOT CAUSE: Which file(s) and task(s) likely caused this
@@ -654,6 +730,9 @@ Prompt: |
 
   <append cross-cutting overlays>
 
+  <append local overlays: LOCAL_OVERLAYS.all under "## Project: Local Standards",
+   LOCAL_OVERLAYS.implementer under "## Project: Coding Standards" — skip if empty>
+
   BUILD COMMAND: python3 .claude/scripts/<resolved_stack>/build.py
   TEST COMMAND: python3 .claude/scripts/<resolved_stack>/test.py
 
@@ -686,6 +765,10 @@ Prompt: |
    "## <Stack> Review Rules" header>
 
   <append cross-cutting overlays>
+
+  <append local overlays: LOCAL_OVERLAYS.all under "## Project: Local Standards",
+   LOCAL_OVERLAYS.implementer under "## Project: Coding Standards",
+   LOCAL_OVERLAYS.reviewer under "## Project: Review Criteria" — skip if empty>
 
   This is a BUG FIX review. In addition to your standard checks, explicitly verify:
   - The fix does not revert or contradict the original implementation's intent

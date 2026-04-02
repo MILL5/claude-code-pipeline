@@ -1,0 +1,17 @@
+# Project Standards
+
+<!-- This file is injected into ALL agents (architect, implementer, reviewer, test-architect).
+     Add project-wide rules, conventions, and context that apply regardless of agent role.
+
+     Examples:
+     - "We use trunk-based development; PRs must be under 400 lines"
+     - "All public APIs must return Result<T> types, never throw exceptions"
+     - "Error messages must include a correlation ID for tracing"
+     - "No abbreviations in identifiers — use 'repository' not 'repo'"
+
+     Keep this focused on universal rules. Use the role-specific files
+     (coding-standards.md, architecture-rules.md, review-criteria.md)
+     for targeted guidance that only specific agents need.
+
+     Delete this comment block and replace with your project's standards.
+     If left empty or comment-only, this file is skipped during injection. -->

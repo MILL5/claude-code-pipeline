@@ -104,11 +104,16 @@ bash .claude/pipeline/init.sh . --stack=swift-ios
 bash .claude/pipeline/init.sh . --stack=react
 bash .claude/pipeline/init.sh . --stack=python
 bash .claude/pipeline/init.sh . --stack=bicep
+bash .claude/pipeline/init.sh . --stack=flutter
+bash .claude/pipeline/init.sh . --stack=android
 bash .claude/pipeline/init.sh . --stack=react --stack=python --stack=bicep
+
+# Flutter multi-stack (shared Dart + native platform code)
+bash .claude/pipeline/init.sh . --stack=flutter --stack=swift-ios --stack=android
 ```
 
 The init script:
-1. Detects all applicable tech stacks from project files (Package.swift, package.json, pyproject.toml, *.bicep, etc.)
+1. Detects all applicable tech stacks from project files (Package.swift, package.json, pyproject.toml, *.bicep, pubspec.yaml, build.gradle.kts, etc.)
    - Also detects Azure SDK usage in dependencies and activates the `azure-sdk` overlay automatically
    - For multi-stack repos, all detected stacks are activated with auto-generated `stack_paths` mappings
 2. Creates symlinks: `.claude/agents/` -> pipeline agents, `.claude/skills/` -> pipeline skills, `.claude/scripts/<stack>/` -> adapter scripts (one per stack)
@@ -152,16 +157,19 @@ Then use any of these to trigger the pipeline:
 | `swift-ios` | `*.xcodeproj`, `*.xcworkspace`, `Package.swift` | Xcode / Swift PM | XCTest | xccov |
 | `react` | `package.json` with `react` dependency | npm/yarn/pnpm/bun + tsc | Jest / Vitest | istanbul / v8 |
 | `python` | `pyproject.toml`, `setup.py`, `requirements.txt` | mypy + ruff | pytest | pytest-cov |
+| `flutter` | `pubspec.yaml` with `flutter:` | flutter analyze + dart format | flutter test (unit/widget/golden/integration) | lcov |
+| `android` | `build.gradle.kts`, `build.gradle` | Gradle (AGP) + Android lint | JUnit 4 + Robolectric / Espresso / Compose Testing | JaCoCo |
 | `bicep` | `*.bicep`, `bicepconfig.json` | bicep build + az bicep lint | ARM-TTK / PSRule / what-if | Resource validation coverage |
 
 **Deploying to Azure?** See the **[Azure Deployment Guide](docs/azure-guide.md)** for Bicep adapter setup, Azure SDK overlay, authentication, and the 7 Azure-specific skills.
 
 ### What Each Adapter Provides
 
-Every adapter includes 9 files:
+Every adapter includes 10 files:
 
 | File | Purpose |
 |------|---------|
+| `manifest.json` | Machine-readable descriptor: detection rules, stack_paths, capabilities, implied overlays |
 | `adapter.md` | Stack metadata: name, languages, build/test commands, blocked commands, conventions |
 | `architect-overlay.md` | Framework-specific complexity patterns for task decomposition and model assignment |
 | `implementer-overlay.md` | Language-specific code quality rules injected into the implementer agent (full version) |
@@ -317,6 +325,7 @@ claude-code-pipeline/
 |
 |-- adapters/
 |   |-- swift-ios/                       # Apple ecosystem adapter
+|   |   |-- manifest.json                # Detects *.xcodeproj, *.xcworkspace, Package.swift
 |   |   |-- adapter.md                   # Xcode, XCTest, xccov
 |   |   |-- architect-overlay.md         # Apple framework complexity patterns
 |   |   |-- implementer-overlay.md       # Swift code quality, @MainActor, MVVM
@@ -325,10 +334,11 @@ claude-code-pipeline/
 |   |   |-- test-overlay.md              # XCTest patterns, actor isolation
 |   |   |-- hooks.json                   # Block xcodebuild, swift build
 |   |   +-- scripts/
-|   |       |-- build.py                 # Xcode build runner (209 lines)
-|   |       +-- test.py                  # XCTest runner + simulator mgmt (830 lines)
+|   |       |-- build.py                 # Xcode build runner
+|   |       +-- test.py                  # XCTest runner + simulator mgmt
 |   |
 |   |-- react/                           # React/TypeScript adapter
+|   |   |-- manifest.json                # Detects package.json with "react"
 |   |   |-- adapter.md                   # npm/yarn/pnpm, Jest/Vitest
 |   |   |-- architect-overlay.md         # Component hierarchy, state management
 |   |   |-- implementer-overlay.md       # TypeScript strict, hooks rules, JSX
@@ -341,6 +351,7 @@ claude-code-pipeline/
 |   |       +-- test.py                  # Jest/Vitest runner with coverage
 |   |
 |   |-- python/                          # Python adapter
+|   |   |-- manifest.json                # Detects pyproject.toml, setup.py, requirements.txt
 |   |   |-- adapter.md                   # pip/poetry/uv, pytest, mypy/ruff
 |   |   |-- architect-overlay.md         # Module decomposition, async, Django/FastAPI
 |   |   |-- implementer-overlay.md       # Type hints, dataclasses, PEP conventions
@@ -352,7 +363,34 @@ claude-code-pipeline/
 |   |       |-- build.py                 # mypy + ruff runner
 |   |       +-- test.py                  # pytest runner with coverage
 |   |
+|   |-- flutter/                         # Flutter/Dart adapter
+|   |   |-- manifest.json                # Detects pubspec.yaml with flutter:
+|   |   |-- adapter.md                   # Flutter SDK, flutter test, lcov
+|   |   |-- architect-overlay.md         # MVVM, widget decomposition, platform patterns
+|   |   |-- implementer-overlay.md       # Dart style, Compose, state mgmt, performance
+|   |   |-- implementer-overlay-essential.md  # Compact rules-only variant for Haiku
+|   |   |-- reviewer-overlay.md          # Widget rebuilds, lifecycle, l10n, a11y
+|   |   |-- test-overlay.md              # Unit, widget, golden, integration tests
+|   |   |-- hooks.json                   # Block flutter test/build/analyze
+|   |   +-- scripts/
+|   |       |-- build.py                 # flutter analyze + dart format
+|   |       +-- test.py                  # flutter test --machine + lcov
+|   |
+|   |-- android/                         # Android/Kotlin adapter
+|   |   |-- manifest.json                # Detects build.gradle.kts, build.gradle
+|   |   |-- adapter.md                   # Gradle, JUnit, JaCoCo
+|   |   |-- architect-overlay.md         # Jetpack, Hilt, coroutines complexity
+|   |   |-- implementer-overlay.md       # Kotlin style, Compose, coroutines, Hilt
+|   |   |-- implementer-overlay-essential.md  # Compact rules-only variant for Haiku
+|   |   |-- reviewer-overlay.md          # Lifecycle, concurrency, security (8 categories)
+|   |   |-- test-overlay.md              # JUnit, Robolectric, Compose testing, Turbine
+|   |   |-- hooks.json                   # Block gradlew test/assemble/lint
+|   |   +-- scripts/
+|   |       |-- build.py                 # Gradle assemble + lint runner
+|   |       +-- test.py                  # JUnit XML + JaCoCo parser
+|   |
 |   +-- bicep/                           # Azure Bicep (IaC) adapter
+|       |-- manifest.json                # Detects *.bicep, bicepconfig.json
 |       |-- adapter.md                   # bicep CLI, ARM-TTK, PSRule, auth docs
 |       |-- architect-overlay.md         # Module decomposition, scope hierarchy
 |       |-- implementer-overlay.md       # Naming, decorators, security, modules
@@ -372,7 +410,7 @@ claude-code-pipeline/
 |       +-- reviewer-overlay.md          # Auth, resilience, lifecycle, security, cost
 |
 |-- tests/                               # Pipeline self-tests (4 layers)
-|   |-- validate_structure.py            # Layer 1: structural integrity (147 checks)
+|   |-- validate_structure.py            # Layer 1: structural integrity (~277 checks, auto-scales with adapters)
 |   |-- test_contracts.py                # Layer 3: output protocol contract tests
 |   |-- parsers.py                       # Shared output protocol parsers (used by L3 + L4)
 |   |-- fixtures/                        # Golden output fixtures for contract tests
@@ -553,7 +591,7 @@ For the full guide (tester instructions, developer commands, severity definition
 
 ## Writing a Custom Adapter
 
-To add support for a new tech stack (e.g., Rust, Go, Java):
+To add support for a new tech stack (e.g., Rust, Go, .NET):
 
 ### 1. Create the adapter directory
 
@@ -561,7 +599,25 @@ To add support for a new tech stack (e.g., Rust, Go, Java):
 mkdir -p adapters/your-stack/scripts
 ```
 
-### 2. Create the 9 required files
+### 2. Create the 10 required files
+
+**`manifest.json`** — Machine-readable adapter descriptor:
+```json
+{
+  "name": "your-stack",
+  "display_name": "Your Language / Framework",
+  "capabilities": [],
+  "implies_overlays": [],
+  "detection": [
+    { "type": "file_exists", "path": "your-project-file" }
+  ],
+  "stack_paths": {
+    "directories": ["src"],
+    "fallback_globs": ["**/*.ext"]
+  }
+}
+```
+Detection rule types: `file_exists`, `file_contains` (with `pattern`), or glob paths. See existing adapters for examples.
 
 **`adapter.md`** — Stack metadata following this structure:
 ```markdown
@@ -725,14 +781,14 @@ The pipeline includes a 4-layer integration test suite that validates structural
 
 ```bash
 # Layer 1: Static validation — checks all files exist, markers present,
-# cross-references resolve, overlays within size limits (163 checks, instant)
+# cross-references resolve, overlays within size limits (~277 checks, instant)
 python3 tests/validate_structure.py
 
 # Layer 2: Dry-run mode — planned but not yet implemented.
 # Will compose all prompts without launching agents for prompt validation.
 
 # Layer 3: Contract tests — validates output protocol parsers against
-# golden fixtures for all agent and script output formats (34 tests, instant)
+# golden fixtures for all agent and script output formats (51 tests, instant)
 python3 tests/test_contracts.py
 
 # Layer 4: Smoke test — creates a temporary project, runs init.sh,
@@ -763,7 +819,7 @@ python3 tests/smoke/run_smoke.py --full
 
 ### Adding Tests for New Adapters
 
-When writing a custom adapter, run `python3 tests/validate_structure.py` after creating your files. It checks for all 9 required adapter files and validates the essential overlay is within the size limit. Add your adapter name to the `ADAPTERS` list in `validate_structure.py`.
+When writing a custom adapter, run `python3 tests/validate_structure.py` after creating your files. It auto-discovers adapters from `manifest.json` files and checks for all 10 required adapter files, validates the essential overlay is within the size limit, and verifies cross-references. No test file edits needed — new adapters are discovered automatically.
 
 ## Requirements
 
@@ -775,6 +831,8 @@ When writing a custom adapter, run `python3 tests/validate_structure.py` after c
   - **swift-ios**: Xcode 15+, `xcrun`, iOS/watchOS simulators
   - **react**: Node.js 18+, npm/yarn/pnpm/bun
   - **python**: Python 3.9+, pip/poetry/uv
+  - **flutter**: Flutter SDK 3.16+ (or FVM), Dart SDK
+  - **android**: Android SDK, Gradle wrapper (`gradlew`), JDK 11+
   - **bicep**: Azure CLI (`az`) + Bicep CLI, optionally PowerShell 7+ (`pwsh`) for PSRule/ARM-TTK
 
 ## FAQ
@@ -789,7 +847,7 @@ Edit `.claude/local/coding-standards.md` with your rules. These get injected int
 Run `/update-pipeline` from Claude Code. It pulls the latest version, shows what changed, validates structural integrity, and commits the submodule bump. If validation fails, it offers to roll back.
 
 **Q: What if my project uses multiple stacks?**
-The pipeline supports multiple adapters simultaneously for multi-stack repos. Use `--stack=react --stack=python` with `init.sh`, or let auto-detection handle it.
+The pipeline supports multiple adapters simultaneously for multi-stack repos. Use `--stack=react --stack=python` with `init.sh`, or let auto-detection handle it. For Flutter apps with native platform code, use `--stack=flutter --stack=swift-ios --stack=android` — file-path routing sends Dart code to the Flutter overlay, Swift to swift-ios, and Kotlin to Android.
 
 **Q: Does the pipeline support CI/CD integration?**
 The pipeline runs locally via Claude Code. It creates PRs that your CI/CD system can pick up normally. The pipeline itself doesn't run in CI.

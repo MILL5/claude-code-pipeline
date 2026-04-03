@@ -12,7 +12,7 @@ A tech-stack-agnostic orchestration system for Claude Code that coordinates plan
 ```bash
 bash init.sh /path/to/project [--stack=<name>]... [--force]
 ```
-Auto-detects all applicable stacks from project files. Supports multiple `--stack` flags for multi-stack repos (e.g., `--stack=react --stack=python --stack=bicep`). Also auto-detects Azure SDK usage and activates the `azure-sdk` overlay when Azure packages are found in dependencies. Creates symlinks and config in the target project's `.claude/` directory.
+Auto-detects all applicable stacks from project files. Supports multiple `--stack` flags for multi-stack repos (e.g., `--stack=react --stack=python --stack=bicep`, or `--stack=flutter --stack=swift-ios --stack=android` for Flutter apps with native code). Also auto-detects Azure SDK usage and activates the `azure-sdk` overlay when Azure packages are found in dependencies. Creates symlinks and config in the target project's `.claude/` directory.
 
 **Run the pipeline** (from within a bootstrapped project):
 ```
@@ -50,8 +50,8 @@ python3 .claude/scripts/<stack>/test.py [OPTIONS]
 
 **Pipeline self-tests** (from the pipeline repo root):
 ```bash
-python3 tests/validate_structure.py          # Layer 1: structural integrity (200 checks)
-python3 tests/test_contracts.py              # Layer 3: output protocol contract tests (43 tests)
+python3 tests/validate_structure.py          # Layer 1: structural integrity (~277 checks, auto-scales)
+python3 tests/test_contracts.py              # Layer 3: output protocol contract tests (51 tests)
 python3 tests/smoke/run_smoke.py             # Layer 4: bootstrap smoke test (init.sh + scripts)
 python3 tests/smoke/run_smoke.py --full      # Layer 4: full pipeline smoke test (costs ~$0.50-1.00)
 ```
@@ -69,7 +69,7 @@ User request → **1a: Feature Clarification** (Sonnet, feature-only Q&A) → **
 
 2. **Skills** (`skills/`) — Seventeen pipeline steps. `orchestrate` is the master coordinator that invokes the core nine: `architect-analyzer`, `architect-planner`, `build-runner`, `test-runner`, `open-pr`, `summarize-implementation`, `token-analysis`. The standalone `fix-defects` skill reads structured defect reports from PR comments and runs the fix pipeline independently. `update-pipeline` manages submodule updates with validation and rollback. Seven Azure/Bicep skills provide IaC-specific capabilities: `azure-login` (auth pre-flight), `validate-bicep`, `deploy-bicep`, `azure-cost-estimate`, `security-scan`, `infra-test-runner`, `azure-drift-check`.
 
-3. **Adapters** (`adapters/`) — Pluggable tech-stack modules (swift-ios, react, python, bicep). Multiple adapters can be active simultaneously for multi-stack repos. Each provides: `adapter.md` (metadata), four `*-overlay.md` files (injected into agents), `hooks.json` (blocks raw build/test commands), and `scripts/build.py` + `scripts/test.py` (runner scripts with strict output contracts). Each adapter also provides `implementer-overlay-essential.md` — a compact (~500-800 chars) rules-only variant used for Haiku tasks to improve signal-to-noise ratio.
+3. **Adapters** (`adapters/`) — Pluggable tech-stack modules (swift-ios, react, python, flutter, android, bicep). Multiple adapters can be active simultaneously for multi-stack repos (e.g., `flutter` + `swift-ios` + `android` for Flutter apps with native code). Each provides: `manifest.json` (detection rules + metadata), `adapter.md` (human-readable metadata), four `*-overlay.md` files (injected into agents), `hooks.json` (blocks raw build/test commands), and `scripts/build.py` + `scripts/test.py` (runner scripts with strict output contracts). Each adapter also provides `implementer-overlay-essential.md` — a compact (~500-1000 chars) rules-only variant used for Haiku tasks to improve signal-to-noise ratio.
 
 ### Cross-Cutting Overlays
 

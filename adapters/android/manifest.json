@@ -1,0 +1,16 @@
+{
+  "name": "android",
+  "display_name": "Android / Kotlin",
+  "capabilities": [],
+  "implies_overlays": [],
+  "detection": [
+    { "type": "file_exists", "path": "build.gradle.kts" },
+    { "type": "file_exists", "path": "build.gradle" },
+    { "type": "file_exists", "path": "app/build.gradle.kts" },
+    { "type": "file_exists", "path": "app/build.gradle" }
+  ],
+  "stack_paths": {
+    "directories": ["app/src/main", "app/src/test", "app/src/androidTest", "android"],
+    "fallback_globs": ["**/*.kt", "**/*.java", "**/build.gradle.kts", "**/build.gradle", "**/AndroidManifest.xml", "gradle/libs.versions.toml"]
+  }
+}

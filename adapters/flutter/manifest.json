@@ -1,0 +1,13 @@
+{
+  "name": "flutter",
+  "display_name": "Flutter / Dart",
+  "capabilities": [],
+  "implies_overlays": [],
+  "detection": [
+    { "type": "file_contains", "path": "pubspec.yaml", "pattern": "flutter:" }
+  ],
+  "stack_paths": {
+    "directories": ["lib", "test", "integration_test"],
+    "fallback_globs": ["**/*.dart", "pubspec.yaml", "analysis_options.yaml", "l10n.yaml", "lib/l10n/*.arb"]
+  }
+}

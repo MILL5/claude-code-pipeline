@@ -281,8 +281,10 @@ detect_overlays() {
 
     # Deduplicate and return comma-separated
     local unique
-    unique=$(printf '%s\n' "${overlays[@]}" | sort -u | tr '\n' ',' | sed 's/,$//')
-    echo "$unique"
+    if [ ${#overlays[@]} -gt 0 ]; then
+        unique=$(printf '%s\n' "${overlays[@]}" | sort -u | tr '\n' ',' | sed 's/,$//')
+        echo "$unique"
+    fi
 }
 
 # Aggregate capabilities from active adapters and overlays
@@ -315,8 +317,10 @@ aggregate_capabilities() {
 
     # Deduplicate and return comma-separated
     local unique
-    unique=$(printf '%s\n' "${caps[@]}" | sort -u | tr '\n' ',' | sed 's/,$//')
-    echo "$unique"
+    if [ ${#caps[@]} -gt 0 ]; then
+        unique=$(printf '%s\n' "${caps[@]}" | sort -u | tr '\n' ',' | sed 's/,$//')
+        echo "$unique"
+    fi
 }
 
 if [ ${#STACKS[@]} -eq 0 ]; then

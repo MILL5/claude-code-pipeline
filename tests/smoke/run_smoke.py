@@ -26,8 +26,10 @@ import sys
 import tempfile
 from pathlib import Path
 
-PIPELINE_ROOT = Path(__file__).resolve().parent.parent.parent
-FIXTURE_DIR = Path(__file__).resolve().parent / "calculator"
+# Use os.path.realpath to normalize macOS /var -> /private/var symlinks,
+# ensuring consistent path comparison with symlink targets.
+PIPELINE_ROOT = Path(os.path.realpath(str(Path(__file__).parent.parent.parent)))
+FIXTURE_DIR = Path(os.path.realpath(str(Path(__file__).parent))) / "calculator"
 
 
 class SmokeResult:
@@ -124,27 +126,49 @@ def validate_bootstrap(project_dir: Path, result: SmokeResult) -> None:
             result.ok("pipeline.config has pipeline_version")
         else:
             result.fail("pipeline.config has pipeline_version")
+        if "pipeline_mode=" in content:
+            result.ok("pipeline.config has pipeline_mode")
+        else:
+            result.fail("pipeline.config has pipeline_mode")
     else:
         result.fail("pipeline.config exists")
 
-    # Symlinks (agents and skills are direct symlinks, scripts is a directory with per-stack symlinks)
-    direct_symlinks = {
-        "agents": PIPELINE_ROOT / "agents",
-        "skills": PIPELINE_ROOT / "skills",
-    }
-    for name, expected_target in direct_symlinks.items():
-        link_path = claude_dir / name
-        if link_path.is_symlink():
-            actual_target = link_path.resolve()
-            if actual_target == expected_target.resolve():
-                result.ok(f"Symlink {name}/ -> correct target")
-            else:
-                result.fail(f"Symlink {name}/ -> correct target",
-                            f"expected {expected_target}, got {actual_target}")
-        elif link_path.is_dir():
-            result.ok(f"{name}/ directory exists (may be copy instead of symlink)")
+    # agents/ — single symlink
+    agents_link = claude_dir / "agents"
+    if agents_link.is_symlink():
+        if agents_link.resolve() == (PIPELINE_ROOT / "agents").resolve():
+            result.ok("Symlink agents/ -> correct target")
         else:
-            result.fail(f"Symlink {name}/ exists")
+            result.fail("Symlink agents/ -> correct target",
+                        f"got {agents_link.resolve()}")
+    elif agents_link.is_dir():
+        result.ok("agents/ directory exists (may be copy instead of symlink)")
+    else:
+        result.fail("Symlink agents/ exists")
+
+    # skills/ — real directory with per-skill symlinks (supports local skills)
+    skills_dir = claude_dir / "skills"
+    if skills_dir.is_dir() and not skills_dir.is_symlink():
+        result.ok("skills/ is a real directory (per-skill layout)")
+        for skill in ["orchestrate", "build-runner", "test-runner"]:
+            skill_link = skills_dir / skill
+            if skill_link.is_symlink():
+                if skill_link.resolve() == (PIPELINE_ROOT / "skills" / skill).resolve():
+                    result.ok(f"Per-skill symlink: {skill}")
+                else:
+                    result.fail(f"Per-skill symlink: {skill}",
+                                f"got {skill_link.resolve()}")
+            else:
+                result.fail(f"Per-skill symlink: {skill}")
+        gi = skills_dir / ".gitignore"
+        if gi.exists():
+            result.ok("skills/.gitignore exists")
+        else:
+            result.fail("skills/.gitignore exists")
+    elif skills_dir.is_symlink():
+        result.ok("skills/ is a legacy single symlink")
+    else:
+        result.fail("skills/ exists")
 
     # Per-stack scripts symlink (scripts/python/ -> adapters/python/scripts/)
     scripts_dir = claude_dir / "scripts"
@@ -188,6 +212,13 @@ def validate_bootstrap(project_dir: Path, result: SmokeResult) -> None:
             result.fail("settings.json is valid JSON", str(e))
     else:
         result.fail("settings.json exists")
+
+    # .gitignore
+    claude_gi = claude_dir / ".gitignore"
+    if claude_gi.exists():
+        result.ok(".claude/.gitignore exists")
+    else:
+        result.fail(".claude/.gitignore exists")
 
     # tmp/ directory
     tmp_dir = claude_dir / "tmp"

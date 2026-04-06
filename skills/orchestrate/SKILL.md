@@ -24,8 +24,9 @@ Before starting, read these files (skip if already in context from this session)
 
 Before any agent launches, determine the active tech-stack adapters:
 
-1. Read `.claude/pipeline.config` to get `stacks`, `pipeline_root`, `overlays`, `stack_paths.*`, and `capabilities` values
-2. Parse the `stacks` value (comma-separated) into a list. The first stack is the **primary** (fallback).
+1. Read `.claude/pipeline.config` to get `stacks`, `pipeline_root`, `pipeline_mode`, `overlays`, `stack_paths.*`, and `capabilities` values
+2. **Resolve `pipeline_root`:** If `pipeline_root` does not start with `/`, it is a relative path — resolve it against the project root (the directory containing `.claude/`). For example, if `pipeline_root=.claude/pipeline` and the project root is `/home/user/myapp`, the resolved path is `/home/user/myapp/.claude/pipeline`. All subsequent `<pipeline_root>` references in this skill use the **resolved** absolute path.
+3. Parse the `stacks` value (comma-separated) into a list. The first stack is the **primary** (fallback).
    - **Backward compatibility:** If the config has `stack` (singular) instead of `stacks`, treat it as a single-element list.
 3. Parse the `capabilities` value (comma-separated) into **ACTIVE_CAPABILITIES** — a set of capability
    strings (e.g., `azure-auth`). These are aggregated from adapter and overlay `manifest.json` files

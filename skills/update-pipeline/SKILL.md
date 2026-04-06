@@ -19,6 +19,7 @@ Updates the pipeline submodule to the latest version with validation and automat
 3. Extract the submodule `path` (e.g., `pipeline` or `.claude/pipeline`).
 4. If `.gitmodules` does not exist or no pipeline submodule is found:
    - Read `pipeline_root` from `.claude/pipeline.config`
+   - **Resolve:** if `pipeline_root` does not start with `/`, resolve it against the project root (the directory containing `.claude/`).
    - Check if that path is a git repository (`git -C <path> rev-parse --is-inside-work-tree`)
    - If it is a plain clone (not a submodule), inform the user:
      "Pipeline is not installed as a submodule. To update manually:

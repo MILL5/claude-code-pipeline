@@ -85,6 +85,23 @@ done
 
 PROJECT_DIR="$(cd "$PROJECT_DIR" && pwd)"
 
+# --- Determine pipeline mode ---
+# If PIPELINE_ROOT is inside PROJECT_DIR, we're in submodule mode (relative paths).
+# Otherwise, legacy clone mode (absolute paths).
+PIPELINE_MODE="clone"
+PIPELINE_ROOT_REL="$PIPELINE_ROOT"
+
+case "$PIPELINE_ROOT" in
+    "$PROJECT_DIR"/*)
+        PIPELINE_MODE="submodule"
+        PIPELINE_ROOT_REL="${PIPELINE_ROOT#$PROJECT_DIR/}"
+        info "Submodule mode detected: pipeline at $PIPELINE_ROOT_REL"
+        ;;
+    *)
+        info "Clone mode: pipeline at $PIPELINE_ROOT"
+        ;;
+esac
+
 # --- Step 1: Ensure .claude/ exists ---
 CLAUDE_DIR="$PROJECT_DIR/.claude"
 mkdir -p "$CLAUDE_DIR"
@@ -264,8 +281,10 @@ detect_overlays() {
 
     # Deduplicate and return comma-separated
     local unique
-    unique=$(printf '%s\n' "${overlays[@]}" | sort -u | tr '\n' ',' | sed 's/,$//')
-    echo "$unique"
+    if [ ${#overlays[@]} -gt 0 ]; then
+        unique=$(printf '%s\n' "${overlays[@]}" | sort -u | tr '\n' ',' | sed 's/,$//')
+        echo "$unique"
+    fi
 }
 
 # Aggregate capabilities from active adapters and overlays
@@ -298,8 +317,10 @@ aggregate_capabilities() {
 
     # Deduplicate and return comma-separated
     local unique
-    unique=$(printf '%s\n' "${caps[@]}" | sort -u | tr '\n' ',' | sed 's/,$//')
-    echo "$unique"
+    if [ ${#caps[@]} -gt 0 ]; then
+        unique=$(printf '%s\n' "${caps[@]}" | sort -u | tr '\n' ',' | sed 's/,$//')
+        echo "$unique"
+    fi
 }
 
 if [ ${#STACKS[@]} -eq 0 ]; then
@@ -353,8 +374,11 @@ stacks=$STACKS_CSV
 # Edit these to match your project structure
 $STACK_PATHS_LINES
 
-# Absolute path to the pipeline repo
-pipeline_root=$PIPELINE_ROOT
+# Path to the pipeline repo (relative in submodule mode, absolute in clone mode)
+pipeline_root=$PIPELINE_ROOT_REL
+
+# Pipeline installation mode
+pipeline_mode=$PIPELINE_MODE
 
 # Cross-cutting overlays (comma-separated, empty if none)
 overlays=$OVERLAYS
@@ -373,22 +397,37 @@ EOF
 fi
 
 # --- Step 4: Create symlinks ---
+
+# Compute relative path from one directory to another (portable across macOS and Linux).
+# Uses realpath to resolve symlinks like macOS's /var -> /private/var before computing,
+# ensuring the correct number of ../ segments regardless of filesystem symlinks.
+compute_relpath() {
+    python3 -c "import os.path; print(os.path.relpath(os.path.realpath('$1'), os.path.realpath('$2')))"
+}
+
 create_symlink() {
-    local target="$1"
-    local link="$2"
+    local target="$1"    # absolute path to the target
+    local link="$2"      # absolute path where the symlink goes
     local desc="$3"
+
+    # Compute relative path from link's parent directory to target
+    local link_dir rel_target
+    link_dir="$(dirname "$link")"
+    rel_target=$(compute_relpath "$target" "$link_dir")
 
     if [ -L "$link" ]; then
         if [ "$FORCE" = true ]; then
             rm "$link"
         else
-            local existing
-            existing=$(readlink "$link" 2>/dev/null || echo "unknown")
-            if [ "$existing" = "$target" ]; then
+            # Compare resolved physical targets (handles macOS /var -> /private/var etc.)
+            local existing_resolved target_resolved
+            existing_resolved=$(python3 -c "import os.path; print(os.path.realpath('$link'))" 2>/dev/null || echo "unknown")
+            target_resolved=$(python3 -c "import os.path; print(os.path.realpath('$target'))" 2>/dev/null || echo "unknown")
+            if [ "$existing_resolved" = "$target_resolved" ]; then
                 info "Symlink already correct: $desc"
                 return
             fi
-            warn "Symlink exists but points elsewhere: $link -> $existing (expected $target). Use --force to fix."
+            warn "Symlink exists but points elsewhere: $link (expected $target). Use --force to fix."
             return
         fi
     elif [ -e "$link" ]; then
@@ -403,15 +442,47 @@ create_symlink() {
         fi
     fi
 
-    ln -s "$target" "$link"
-    info "Linked: $desc -> $target"
+    ln -s "$rel_target" "$link"
+    info "Linked: $desc -> $rel_target"
 }
 
 # Agents
 create_symlink "$PIPELINE_ROOT/agents" "$CLAUDE_DIR/agents" "agents"
 
-# Skills
-create_symlink "$PIPELINE_ROOT/skills" "$CLAUDE_DIR/skills" "skills"
+# Skills — real directory with per-skill symlinks (supports local skills alongside pipeline skills)
+SKILLS_DIR="$CLAUDE_DIR/skills"
+
+# Migrate from legacy single-symlink layout
+if [ -L "$SKILLS_DIR" ]; then
+    if [ "$FORCE" = true ]; then
+        rm "$SKILLS_DIR"
+        info "Migrated legacy skills symlink to per-skill layout"
+    else
+        warn "skills/ is a single symlink (legacy layout). Use --force to migrate to per-skill layout (required for local skills)."
+    fi
+fi
+
+mkdir -p "$SKILLS_DIR"
+
+# Create per-skill relative symlinks
+PIPELINE_SKILL_NAMES=()
+for skill_dir in "$PIPELINE_ROOT"/skills/*/; do
+    [ -d "$skill_dir" ] || continue
+    skill_name="$(basename "$skill_dir")"
+    PIPELINE_SKILL_NAMES+=("$skill_name")
+    create_symlink "$skill_dir" "$SKILLS_DIR/$skill_name" "skills/$skill_name"
+done
+
+# Generate .gitignore — excludes pipeline skill symlinks, allows local skills
+cat > "$SKILLS_DIR/.gitignore" <<'SKILLEOF'
+# Auto-generated by init.sh — pipeline skill symlinks
+# Local skills NOT listed here will be tracked by git
+SKILLEOF
+for sn in "${PIPELINE_SKILL_NAMES[@]}"; do
+    echo "/$sn" >> "$SKILLS_DIR/.gitignore"
+done
+echo "/.gitignore" >> "$SKILLS_DIR/.gitignore"
+info "Generated skills/.gitignore (${#PIPELINE_SKILL_NAMES[@]} pipeline skills excluded)"
 
 # Scripts (per-stack subdirectories)
 # Remove legacy flat symlink if present
@@ -507,6 +578,20 @@ for tmpl in project-overlay.md coding-standards.md architecture-rules.md review-
     fi
 done
 
+# --- Step 7.6: Generate .claude/.gitignore ---
+CLAUDE_GITIGNORE="$CLAUDE_DIR/.gitignore"
+if [ ! -f "$CLAUDE_GITIGNORE" ] || [ "$FORCE" = true ]; then
+    cat > "$CLAUDE_GITIGNORE" <<'GIEOF'
+# Auto-generated by init.sh — pipeline-managed symlinks and temp files
+# Regenerate with: bash <pipeline_path>/init.sh . --force
+/agents
+/overlays
+/scripts
+/tmp
+GIEOF
+    info "Generated .claude/.gitignore"
+fi
+
 # --- Step 8: Summary ---
 echo ""
 echo "========================================"
@@ -515,24 +600,25 @@ echo "========================================"
 echo ""
 echo "  Project:    $PROJECT_DIR"
 echo "  Stack(s):   $STACKS_CSV"
-echo "  Pipeline:   $PIPELINE_ROOT (v$PIPELINE_VERSION)"
+echo "  Pipeline:   $PIPELINE_ROOT_REL (v$PIPELINE_VERSION, $PIPELINE_MODE mode)"
 echo ""
-echo "  Symlinks:"
-echo "    .claude/agents  -> pipeline/agents"
-echo "    .claude/skills  -> pipeline/skills"
+echo "  Symlinks (relative):"
+echo "    .claude/agents/     -> pipeline agents"
+echo "    .claude/skills/*/   -> pipeline skills (per-skill symlinks)"
 for s in "${STACKS[@]}"; do
-echo "    .claude/scripts/$s -> pipeline/adapters/$s/scripts"
+echo "    .claude/scripts/$s/ -> pipeline adapters/$s/scripts"
 done
 if [ -n "$OVERLAYS" ]; then
-echo "    .claude/overlays -> pipeline/overlays"
+echo "    .claude/overlays/   -> pipeline overlays"
 fi
 echo ""
-echo "  Config:     .claude/pipeline.config"
-echo "  Hooks:      .claude/settings.json"
+echo "  Config:       .claude/pipeline.config"
+echo "  Hooks:        .claude/settings.json"
 if [ -n "$OVERLAYS" ]; then
-echo "  Overlays:   $OVERLAYS"
+echo "  Overlays:     $OVERLAYS"
 fi
-echo "  Local:      .claude/local/ (project-specific overlays)"
+echo "  Local:        .claude/local/ (project-specific overlays)"
+echo "  Local skills: add to .claude/skills/<name>/SKILL.md (auto-tracked by git)"
 echo ""
 echo "  Next steps:"
 echo "    1. Edit .claude/pipeline.config — review stack_paths mappings"

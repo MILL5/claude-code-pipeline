@@ -40,8 +40,9 @@ Store `PR_NUMBER` and `PR_URL` for the session.
 
 Same as orchestrate Step 0:
 
-1. Read `.claude/pipeline.config` to get `stack` and `pipeline_root`
-2. Read `<pipeline_root>/adapters/<stack>/adapter.md`
+1. Read `.claude/pipeline.config` to get `stack` (or `stacks`), `pipeline_root`, and `pipeline_mode`
+2. **Resolve `pipeline_root`:** If `pipeline_root` does not start with `/`, resolve it against the project root (the directory containing `.claude/`).
+3. Read `<pipeline_root>/adapters/<stack>/adapter.md`
 3. Load overlay files for agent composition
 
 ## Step 2: Initialize Token Tracking

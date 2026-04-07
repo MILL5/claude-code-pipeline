@@ -592,6 +592,20 @@ GIEOF
     info "Generated .claude/.gitignore"
 fi
 
+# --- Step 7.7: Unstage previously-tracked paths now covered by .gitignore ---
+# When migrating from an older layout, symlinks like scripts/ or agents/ may
+# already be in the git index.  The new .gitignore hides them from the working
+# tree, but git still tracks the index entry → shows as "D (unstaged delete)".
+# Fix: remove them from the index so the .gitignore takes full effect.
+if git -C "$PROJECT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    for ignored_path in agents overlays scripts tmp; do
+        if git -C "$PROJECT_DIR" ls-files --error-unmatch ".claude/$ignored_path" >/dev/null 2>&1; then
+            git -C "$PROJECT_DIR" rm -r --cached --quiet ".claude/$ignored_path" 2>/dev/null || true
+            info "Unstaged previously-tracked $ignored_path (now in .gitignore)"
+        fi
+    done
+fi
+
 # --- Step 8: Summary ---
 echo ""
 echo "========================================"

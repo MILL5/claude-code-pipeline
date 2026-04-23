@@ -292,27 +292,30 @@ def parse_results(output):
     errors = 0
     failures = {}
 
-    # pytest summary line patterns:
-    # "5 passed in 0.12s"
-    # "3 passed, 2 failed in 0.45s"
-    # "1 passed, 1 failed, 1 error in 0.33s"
-    # "2 failed, 1 error in 0.50s"
-    summary_match = re.search(
-        r"(?:=+\s*)?"
-        r"(?:(\d+) passed)?"
-        r"(?:,?\s*(\d+) failed)?"
-        r"(?:,?\s*(\d+) error)?"
-        r"(?:,?\s*(\d+) warning)?"
-        r"(?:,?\s*(\d+) deselected)?"
-        r"(?:,?\s*(\d+) skipped)?"
-        r"\s+in\s+[\d.]+s",
-        output
-    )
+    # Locate the last pytest summary line — handles any token order, e.g.
+    # "17 failed, 520 passed in 2.00s" as well as "520 passed, 17 failed in 2.00s"
+    summary_line = None
+    for line in reversed(output.splitlines()):
+        stripped = line.strip()
+        if (re.search(r'\d+\s+(?:passed|failed|error)', stripped) and
+                re.search(r'\bin\s+[\d.]+\s*s\b', stripped)):
+            summary_line = stripped
+            break
 
-    if summary_match:
-        passed = int(summary_match.group(1) or 0)
-        failed = int(summary_match.group(2) or 0)
-        errors = int(summary_match.group(3) or 0)
+    if summary_line:
+        _plural = {'errors': 'error', 'warnings': 'warning'}
+        for m in re.finditer(
+            r'(\d+)\s+(passed|failed|errors?|skipped|deselected|warnings?)',
+            summary_line,
+        ):
+            n, kind = m.groups()
+            key = _plural.get(kind, kind)
+            if key == 'passed':
+                passed = int(n)
+            elif key == 'failed':
+                failed = int(n)
+            elif key == 'error':
+                errors = int(n)
         total = passed + failed + errors
 
     # Also try the short format: "N passed" or "N failed"

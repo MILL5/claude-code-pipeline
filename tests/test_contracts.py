@@ -442,5 +442,51 @@ class TestAzureAuthOutput(unittest.TestCase):
         self.assertIsNone(result)
 
 
+class TestPythonAdapterParseResults(unittest.TestCase):
+    """Regression tests for parse_results() in adapters/python/scripts/test.py.
+
+    Covers all pytest summary token orderings — critically including the
+    default 'N failed, M passed' order that the old fixed-order regex missed.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        import importlib.util
+        adapter_path = Path(__file__).resolve().parent.parent / "adapters/python/scripts/test.py"
+        spec = importlib.util.spec_from_file_location("_python_test_adapter", adapter_path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        cls._parse = staticmethod(mod.parse_results)
+
+    def _run(self, summary_line: str):
+        total, passed, failed, errors, _ = self._parse(summary_line)
+        return total, passed, failed, errors
+
+    def test_passed_only(self) -> None:
+        total, passed, failed, errors = self._run("2 passed in 0.12s")
+        self.assertEqual((total, passed, failed, errors), (2, 2, 0, 0))
+
+    def test_failed_before_passed(self) -> None:
+        """Pytest default order when failures exist: failed token precedes passed."""
+        total, passed, failed, errors = self._run("17 failed, 520 passed in 2.00s")
+        self.assertEqual((total, passed, failed, errors), (537, 520, 17, 0))
+
+    def test_passed_before_failed(self) -> None:
+        total, passed, failed, errors = self._run("520 passed, 17 failed in 2.00s")
+        self.assertEqual((total, passed, failed, errors), (537, 520, 17, 0))
+
+    def test_passed_failed_error(self) -> None:
+        total, passed, failed, errors = self._run("1 passed, 1 failed, 1 error in 0.33s")
+        self.assertEqual((total, passed, failed, errors), (3, 1, 1, 1))
+
+    def test_passed_with_skipped(self) -> None:
+        total, passed, failed, errors = self._run("5 passed, 2 skipped in 0.1s")
+        self.assertEqual((total, passed, failed, errors), (5, 5, 0, 0))
+
+    def test_failed_and_error_only(self) -> None:
+        total, passed, failed, errors = self._run("3 failed, 1 error in 0.5s")
+        self.assertEqual((total, passed, failed, errors), (4, 0, 3, 1))
+
+
 if __name__ == "__main__":
     unittest.main()

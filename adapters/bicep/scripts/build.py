@@ -93,7 +93,11 @@ def run_bicep_build(project_dir, bicep_files, bicep_cmd):
     all_output = []
 
     for bicep_file in bicep_files:
-        cmd = bicep_cmd + ["build", bicep_file]
+        # `az bicep build` requires --file; standalone `bicep build` takes positional.
+        if bicep_cmd[0] == "az":
+            cmd = bicep_cmd + ["build", "--file", bicep_file]
+        else:
+            cmd = bicep_cmd + ["build", bicep_file]
         print(f"Running: {' '.join(cmd)}")
 
         result = subprocess.run(

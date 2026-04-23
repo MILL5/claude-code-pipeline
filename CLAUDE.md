@@ -39,6 +39,12 @@ Reads structured defect reports from GitHub PR comments (see `templates/defect-r
 ```
 Pulls latest pipeline submodule, shows changelog, validates structural integrity, re-runs `init.sh` if needed, and commits the submodule bump.
 
+**Opt in to backlog integration** (one-time, from within a bootstrapped project):
+```
+/bootstrap-backlog
+```
+Provisions 12 namespaced labels, 4 Issue Form YAMLs, and a sentinel config (`.github/pipeline-backlog.yml`). After opt-in, `/orchestrate` classifies out-of-scope items as fold (Haiku-tier, spawned into the current run up to `fold_cap`) or defer (Sonnet/Opus-tier, filed as GitHub issues with a traceability block). Idempotent; safe to re-run after `/update-pipeline`. See the README "Opting in to Backlog Integration" section for details.
+
 **Azure/Bicep skills** (from within a bootstrapped project):
 ```
 /azure-login            # Verify Azure auth, subscription context, permissions
@@ -75,7 +81,7 @@ User request → **1a: Feature Clarification** (Sonnet, feature-only Q&A) → **
 
 1. **Agents** (`agents/`) — Four generic, stack-agnostic agent definitions: `architect-agent`, `implementer-agent`, `code-reviewer-agent`, `test-architect-agent`. Each contains an `<!-- ADAPTER:TECH_STACK_CONTEXT -->` marker where adapter overlays get injected at launch. `implementer-contract.md` is the canonical Haiku readiness checklist referenced by both the planner and implementer.
 
-2. **Skills** (`skills/`) — Seventeen pipeline steps. `orchestrate` is the master coordinator that invokes the core nine: `architect-analyzer`, `architect-planner`, `build-runner`, `test-runner`, `open-pr`, `summarize-implementation`, `token-analysis`. The standalone `fix-defects` skill reads structured defect reports from PR comments and runs the fix pipeline independently. `update-pipeline` manages submodule updates with validation and rollback. Seven Azure/Bicep skills provide IaC-specific capabilities: `azure-login` (auth pre-flight), `validate-bicep`, `deploy-bicep`, `azure-cost-estimate`, `security-scan`, `infra-test-runner`, `azure-drift-check`.
+2. **Skills** (`skills/`) — Eighteen pipeline steps. `orchestrate` is the master coordinator that invokes the core nine: `architect-analyzer`, `architect-planner`, `build-runner`, `test-runner`, `open-pr`, `summarize-implementation`, `token-analysis`. The standalone `fix-defects` skill reads structured defect reports from PR comments and runs the fix pipeline independently. `update-pipeline` manages submodule updates with validation and rollback. `bootstrap-backlog` provisions the GitHub labels, Issue Forms, and sentinel config that enable backlog integration for deferred work. Seven Azure/Bicep skills provide IaC-specific capabilities: `azure-login` (auth pre-flight), `validate-bicep`, `deploy-bicep`, `azure-cost-estimate`, `security-scan`, `infra-test-runner`, `azure-drift-check`.
 
 3. **Adapters** (`adapters/`) — Pluggable tech-stack modules (swift-ios, react, python, flutter, android, bicep). Multiple adapters can be active simultaneously for multi-stack repos (e.g., `flutter` + `swift-ios` + `android` for Flutter apps with native code). Each provides: `manifest.json` (detection rules + metadata), `adapter.md` (human-readable metadata), four `*-overlay.md` files (injected into agents), `hooks.json` (blocks raw build/test commands), and `scripts/build.py` + `scripts/test.py` (runner scripts with strict output contracts). Each adapter also provides `implementer-overlay-essential.md` — a compact (~500-1000 chars) rules-only variant used for Haiku tasks to improve signal-to-noise ratio.
 

@@ -63,6 +63,20 @@ def parse_implementer_result(output: str) -> dict:
         return {"status": "UNKNOWN", "error": f"unexpected first line: {first_line}"}
 
 
+def _parse_optional_entry(raw: str) -> dict:
+    """Split a `[should-fix] ...` / `[nice-to-have] ...` prefix from free text.
+
+    Returns {"text": str, "tag": "should-fix"|"nice-to-have"|None}. Entries
+    without a known tag get tag=None for backward compatibility.
+    """
+    s = raw.strip()
+    for tag in ("should-fix", "nice-to-have"):
+        prefix = f"[{tag}]"
+        if s.startswith(prefix):
+            return {"text": s[len(prefix):].strip(), "tag": tag}
+    return {"text": s, "tag": None}
+
+
 def parse_reviewer_result(output: str) -> dict:
     """Parse code-reviewer agent output per the documented protocol."""
     lines = output.strip().split("\n")
@@ -71,19 +85,19 @@ def parse_reviewer_result(output: str) -> dict:
 
     first_line = lines[0].strip()
     if first_line == "PASS":
-        suggestions: list[str] = []
+        suggestions: list[dict] = []
         for line in lines[1:]:
             stripped = line.strip()
             if stripped.startswith("---TOKEN_REPORT---"):
                 break
             if stripped:
-                suggestions.append(stripped)
+                suggestions.append(_parse_optional_entry(stripped))
         return {"status": "PASS", "suggestions": suggestions}
 
     elif first_line == "FAIL":
         issues: list[dict] = []
         current_issue: dict = {}
-        optional_improvements: list[str] = []
+        optional_improvements: list[dict] = []
         in_optional = False
         for line in lines[1:]:
             stripped = line.strip()
@@ -97,7 +111,7 @@ def parse_reviewer_result(output: str) -> dict:
                 continue
             if in_optional:
                 if stripped:
-                    optional_improvements.append(stripped)
+                    optional_improvements.append(_parse_optional_entry(stripped))
                 continue
             if stripped.startswith("ISSUE:"):
                 if current_issue:

@@ -1,0 +1,5 @@
+# Sentinel present but explicitly disabled.
+version: 1
+enabled: false
+fold_cap: 0
+project_number: null

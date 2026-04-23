@@ -248,6 +248,37 @@ FIX: <one-line description of required fix>
 Only include CRITICAL and HIGH issues in the FAIL output.
 Medium/low issues go after a `--- OPTIONAL IMPROVEMENTS ---` divider.
 
+Within OPTIONAL IMPROVEMENTS, prefix EACH entry with exactly one of two tags:
+
+```
+--- OPTIONAL IMPROVEMENTS ---
+[should-fix] <one-line issue>: <why it matters>
+[nice-to-have] <one-line issue>: <why it matters>
+```
+
+**`[should-fix]`** — a real improvement with concrete value, but not a blocker.
+Typically medium-severity: a tight duplication, a missing abstraction that
+would pay off in the next feature, a naming inconsistency that reviewers keep
+tripping on. These are the things you'd raise again in the next review.
+
+**`[nice-to-have]`** — genuinely optional: style polish, speculative refactors,
+defensive programming for unlikely cases, ideas for the future. Safe to ignore.
+
+The tags control fold-vs-defer behavior downstream: `[should-fix]` items are
+candidates to fold into the current run (subject to the run's fold cap);
+`[nice-to-have]` items default to deferral to the backlog. The classification
+is yours to make — when in doubt, choose `[nice-to-have]`.
+
+### Backlog Filing (Pipeline Mode)
+
+If the orchestrator's prompt includes backlog integration metadata (`RUN_ID`,
+`PR_NUMBER`, `REPO`, `SENTINEL_PRESENT=true`), the orchestrator will file
+deferred optional improvements to the consumer repo's backlog after the review.
+Your only job is to emit the tagged entries above with clear one-line
+descriptions — do NOT shell out to `gh` yourself. If `SENTINEL_PRESENT=false`
+or the metadata is absent, emit the same output; the orchestrator will skip
+filing silently.
+
 **Fail the review for:** memory/resource leaks, race conditions, thread safety
 violations, missing error handling on failable paths, security issues, force
 operations without justification, violations of ORCHESTRATOR.md conventions,

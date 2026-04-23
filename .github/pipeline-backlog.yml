@@ -1,0 +1,24 @@
+# .github/pipeline-backlog.yml
+#
+# Marker file: its presence enables /orchestrate backlog filing for this repo.
+# Delete this file to disable backlog integration — labels and Issue Forms will remain.
+#
+# Managed by the claude-code-pipeline /bootstrap-backlog skill.
+# Re-running the skill is idempotent and safe.
+
+version: 1
+enabled: true
+
+# Maximum number of items folded into the current /orchestrate run across all
+# phases. Past the cap, all surfaced items are deferred to the backlog even if
+# they would otherwise qualify for inline fixing.
+#   0 → never fold, always defer
+#   N → allow up to N folds per run (default: 3)
+fold_cap: 3
+
+# Optional GitHub Projects v2 number. If set, filed issues are added to this
+# project via `gh project item-add`. Leave null if you don't use Projects.
+project_number: null
+
+# Reserved for v2:
+# label_overrides:

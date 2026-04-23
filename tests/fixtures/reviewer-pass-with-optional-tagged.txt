@@ -1,0 +1,14 @@
+PASS
+[should-fix] Duplicated validation logic across divide() and modulo() — extract a shared guard helper
+[nice-to-have] Error messages could include the offending value for easier debugging
+
+---TOKEN_REPORT---
+FILES_READ:
+- src/calculator.py (~520 chars)
+- tests/test_calculator.py (~1100 chars)
+TOOL_CALLS:
+- Read: 3
+- Grep: 1
+SELF_ASSESSED_INPUT: ~4200 chars
+SELF_ASSESSED_OUTPUT: ~300 chars
+---END_TOKEN_REPORT---

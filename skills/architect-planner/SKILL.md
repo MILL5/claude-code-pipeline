@@ -335,6 +335,11 @@ to only what the implementer needs to produce code.
 - [ ] Tasks that produce interfaces consumed by other tasks are in an earlier wave than
   their consumers.
 - [ ] Integration test tasks are in the final wave, after all component tasks complete.
+- [ ] **Implicit contract sequencing:** When two parallel tasks share an implicit contract
+  (Task A defines a function signature that Task B calls), they must NOT be in the same wave —
+  put Task A in an earlier wave and inline its output signature into Task B's brief. Parallel
+  tasks that each see only half of a shared contract produce runtime crashes that code review
+  cannot catch. If the contract cannot be pre-determined, add a Wave 0 task to define it first.
 
 ## Common Mistakes to Avoid
 

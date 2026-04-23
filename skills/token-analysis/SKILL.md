@@ -42,6 +42,12 @@ against the 70/20/10 target:
 - **Sonnet** should be ~20%
 - **Opus** should be ~10%
 
+**Plan-type adjustment:** The 70/20/10 target assumes feature work where implementation
+dominates cost. For **refactor** plan types, planning and review inherently exceed
+implementation cost — use **50/40/10** as the comparison baseline instead. Identify the
+plan type from the 1b-plan.md `## Overview` section or the PR title prefix (`refactor:`).
+Flag deviations only against the appropriate baseline.
+
 Compute each model's share as: `model_cost / total_cost × 100`. Report BOTH cost-weighted
 percentages AND call-count percentages — but flag deviations based on the cost metric only.
 Call-count percentages can create a false sense of efficiency (e.g., "69% Haiku calls" while
@@ -75,7 +81,9 @@ Evaluate pipeline execution characteristics:
 - **Step token weight**: which steps consume the most tokens relative to their role (e.g.,
   clarification consuming more than implementation suggests unclear scope)
 - **Planning overhead**: ratio of planning tokens (1a + 1b) to implementation tokens (2 + 2.1 + 2.2).
-  Flag if planning > 40% of implementation — may indicate over-planning
+  Flag if planning > 40% of implementation for feature plan types. For refactor plan types,
+  planning > 100% of implementation is expected (dependency verification before deletes IS
+  the value of Step 1a) — use 100% as the flag threshold.
 - **Review cost ratio**: total review + fix tokens vs. implementation tokens. A ratio > 0.5
   suggests implementations are frequently failing review — possible quality issue in context briefs
 

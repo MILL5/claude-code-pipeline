@@ -507,6 +507,53 @@ class TestPythonAdapterParseResults(unittest.TestCase):
         self.assertEqual((total, passed, failed, errors), (4, 0, 3, 1))
 
 
+class TestBicepAdapterBuildCommand(unittest.TestCase):
+    """Regression tests for run_bicep_build() command construction.
+
+    Issue #25: `az bicep build` requires `--file <path>` but the runner was
+    passing the file positionally, which works for the standalone `bicep` CLI
+    but fails under `az bicep build`.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        import importlib.util
+        adapter_path = Path(__file__).resolve().parent.parent / "adapters/bicep/scripts/build.py"
+        spec = importlib.util.spec_from_file_location("_bicep_build_adapter", adapter_path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        cls._mod = mod
+
+    def _capture(self, bicep_cmd):
+        """Run run_bicep_build with subprocess.run stubbed; return the cmd list."""
+        captured: list[list[str]] = []
+
+        class _FakeResult:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+
+        def _fake_run(cmd, **kwargs):
+            captured.append(cmd)
+            return _FakeResult()
+
+        original = self._mod.subprocess.run
+        self._mod.subprocess.run = _fake_run
+        try:
+            self._mod.run_bicep_build(".", ["main.bicep"], bicep_cmd)
+        finally:
+            self._mod.subprocess.run = original
+        return captured[0]
+
+    def test_az_driver_uses_file_flag(self) -> None:
+        cmd = self._capture(["az", "bicep"])
+        self.assertEqual(cmd, ["az", "bicep", "build", "--file", "main.bicep"])
+
+    def test_standalone_driver_uses_positional(self) -> None:
+        cmd = self._capture(["bicep"])
+        self.assertEqual(cmd, ["bicep", "build", "main.bicep"])
+
+
 class TestReactAdapterParsers(unittest.TestCase):
     """Regression tests for parsers in adapters/react/scripts/test.py.
 

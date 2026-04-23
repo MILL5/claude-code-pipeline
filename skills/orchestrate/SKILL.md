@@ -45,6 +45,12 @@ and is not used by this skill. Example:
 > Capture that UUID. All subsequent `SendMessage` calls use it:
 > `SendMessage({ to: "ad67fc84c7259e8ad", message: "..." })`
 
+> ⚠️ **Do not assume `name:` makes the agent addressable.** The `name:` field on `Agent(...)`
+> is for UI display and attribution only — it does NOT register the agent for `SendMessage`
+> routing. If you call `SendMessage({ to: "wave-reviewer", ... })` expecting it to route by
+> name, you will get `No agent named '...' is currently addressable` even within the same
+> session that spawned the agent. **Always capture and reuse the `agentId` UUID.**
+
 **Async semantics:** `SendMessage` is fire-and-notify, not request-and-wait. The call returns
 immediately; the resumed agent's reply arrives later as a `<task-notification>`. The
 clarification loops in Steps 1a and 1b work as follows: relay questions to the user, receive
@@ -55,6 +61,17 @@ proceeding to the next step.
 not set), launch a fresh `Agent` with prior context re-embedded in the prompt for each
 continuation. Accept the ~30–40% higher input token cost. Do NOT attempt `SendMessage` when
 the tool is unavailable — the call will fail with "No matching deferred tools found".
+
+### Do not call `ScheduleWakeup` during `/orchestrate`
+
+`ScheduleWakeup` is a `/loop` dynamic-mode primitive — firing it will re-invoke `/orchestrate`
+with the same arguments. The recovery-artifact check (`1a-spec.md` / `1b-plan.md`) will detect
+an in-progress run and prompt to resume, but the re-entry is confusing and wastes tokens.
+
+When you need to wait for a background agent, wait for the `<task-notification>` tool result
+instead — do not self-schedule. If you genuinely need to poll for an external condition,
+use a polling pattern inside `/orchestrate` (e.g. `Bash` with `run_in_background` + notification),
+not `ScheduleWakeup`.
 
 ## Step 0: Load Adapters
 

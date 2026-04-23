@@ -2,6 +2,7 @@
 
 Critical rules for Haiku execution. Violations will fail code review.
 
+- Never run `git commit`/`git push` — orchestrator commits after review
 - Type annotations on all function signatures (parameters and return types)
 - Never use `Any` without a comment explaining why
 - Catch specific exception types — never bare `except:` or `except Exception:`

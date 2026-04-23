@@ -1,0 +1,13 @@
+ RUN  v2.1.9 /abs/path/frontend
+
+ ✓ src/smoke.test.ts (3)
+ ❯ src/components/CoinTile.test.tsx (2) [FAIL]
+   ✗ CoinTile > shows price
+     AssertionError: expected 'BTC' to equal 'ETH'
+   ✗ CoinTile > handles missing data
+     TypeError: Cannot read properties of undefined
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  2 failed | 3 passed (5)
+   Start at  10:00:00
+   Duration  1.45s

@@ -507,5 +507,102 @@ class TestPythonAdapterParseResults(unittest.TestCase):
         self.assertEqual((total, passed, failed, errors), (4, 0, 3, 1))
 
 
+class TestReactAdapterParsers(unittest.TestCase):
+    """Regression tests for parsers in adapters/react/scripts/test.py.
+
+    Covers the vitest/jest JSON parsers, the text-summary fallback, and the
+    JSON-load diagnostic capture. Issue #26: the test runner swallowed green
+    vitest runs because --reporter=json suppresses the text summary, the
+    JSON file occasionally fails to parse, and the fallback regex required a
+    fixed token order.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        import importlib.util
+        adapter_path = Path(__file__).resolve().parent.parent / "adapters/react/scripts/test.py"
+        spec = importlib.util.spec_from_file_location("_react_test_adapter", adapter_path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        cls._mod = mod
+
+    def test_vitest_json_mixed_results(self) -> None:
+        fixture = str(FIXTURES_DIR / "vitest-results.json")
+        result = self._mod.parse_vitest_json(fixture, "")
+        self.assertEqual(result["total"], 5)
+        self.assertEqual(result["passed"], 3)
+        self.assertEqual(result["failed"], 2)
+        self.assertEqual(len(result["failures"]), 2)
+        self.assertIn("CoinTile", result["failures"][0]["test"])
+
+    def test_jest_json_uses_top_level_counts(self) -> None:
+        # Jest & vitest share the same JSON shape; parse_jest_json relies on
+        # the numTotalTests/numPassedTests/numFailedTests top-level keys.
+        fixture = str(FIXTURES_DIR / "vitest-results.json")
+        result = self._mod.parse_jest_json(fixture, "")
+        self.assertEqual(result["total"], 5)
+        self.assertEqual(result["passed"], 3)
+        self.assertEqual(result["failed"], 2)
+
+    def test_fallback_vitest_success(self) -> None:
+        fixture = (FIXTURES_DIR / "vitest-text-success.txt").read_text()
+        result = self._mod.parse_fallback(fixture)
+        self.assertEqual(result["total"], 5)
+        self.assertEqual(result["passed"], 5)
+        self.assertEqual(result["failed"], 0)
+
+    def test_fallback_vitest_mixed_order_independent(self) -> None:
+        fixture = (FIXTURES_DIR / "vitest-text-mixed.txt").read_text()
+        result = self._mod.parse_fallback(fixture)
+        self.assertEqual(result["total"], 5)
+        self.assertEqual(result["passed"], 3)
+        self.assertEqual(result["failed"], 2)
+
+    def test_fallback_vitest_passed_before_failed(self) -> None:
+        # Reversed token order — old regex dropped 'failed' when it came
+        # after 'passed'. Token-based parse must handle either order.
+        text = """ Test Files  1 failed | 1 passed (2)
+      Tests  3 passed | 2 failed (5)
+"""
+        result = self._mod.parse_fallback(text)
+        self.assertEqual(result["total"], 5)
+        self.assertEqual(result["passed"], 3)
+        self.assertEqual(result["failed"], 2)
+
+    def test_fallback_jest_failed_before_passed(self) -> None:
+        fixture = (FIXTURES_DIR / "jest-text-mixed.txt").read_text()
+        result = self._mod.parse_fallback(fixture)
+        self.assertEqual(result["total"], 5)
+        self.assertEqual(result["passed"], 3)
+        self.assertEqual(result["failed"], 2)
+
+    def test_load_json_empty_file_records_diagnostic(self) -> None:
+        import tempfile, os as _os
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+            empty_path = f.name
+        try:
+            diagnostics: list[str] = []
+            result = self._mod._load_json_results(empty_path, "", diagnostics)
+            self.assertIsNone(result)
+            self.assertEqual(len(diagnostics), 1)
+            self.assertIn("empty", diagnostics[0].lower())
+        finally:
+            _os.remove(empty_path)
+
+    def test_load_json_malformed_records_diagnostic(self) -> None:
+        import tempfile, os as _os
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+            f.write("{ not valid json")
+            bad_path = f.name
+        try:
+            diagnostics: list[str] = []
+            result = self._mod._load_json_results(bad_path, "", diagnostics)
+            self.assertIsNone(result)
+            self.assertEqual(len(diagnostics), 1)
+            self.assertIn("malformed", diagnostics[0].lower())
+        finally:
+            _os.remove(bad_path)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,39 @@
+{
+  "numTotalTestSuites": 2,
+  "numPassedTestSuites": 1,
+  "numFailedTestSuites": 1,
+  "numTotalTests": 5,
+  "numPassedTests": 3,
+  "numFailedTests": 2,
+  "numPendingTests": 0,
+  "numTodoTests": 0,
+  "testResults": [
+    {
+      "name": "/abs/path/frontend/src/smoke.test.ts",
+      "status": "passed",
+      "assertionResults": [
+        {"status": "passed", "ancestorTitles": [], "title": "renders"},
+        {"status": "passed", "ancestorTitles": [], "title": "adds numbers"},
+        {"status": "passed", "ancestorTitles": [], "title": "handles empty"}
+      ]
+    },
+    {
+      "name": "/abs/path/frontend/src/components/CoinTile.test.tsx",
+      "status": "failed",
+      "assertionResults": [
+        {
+          "status": "failed",
+          "ancestorTitles": ["CoinTile"],
+          "title": "shows price",
+          "failureMessages": ["AssertionError: expected 'BTC' to equal 'ETH'\n    at /abs/path/node_modules/vitest/dist/index.js:42"]
+        },
+        {
+          "status": "failed",
+          "ancestorTitles": ["CoinTile"],
+          "title": "handles missing data",
+          "failureMessages": ["TypeError: Cannot read properties of undefined"]
+        }
+      ]
+    }
+  ]
+}

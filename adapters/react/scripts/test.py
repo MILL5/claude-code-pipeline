@@ -128,7 +128,14 @@ def run_tests(project_dir, pm, framework, scheme=None, coverage=True):
                     cmd = ["npm", "run", scheme, "--"]
 
                 if framework == "vitest":
-                    cmd += ["--reporter=json", f"--outputFile={json_output_path}"]
+                    # Keep default reporter active so parse_fallback has text to match
+                    # if JSON parsing fails. --outputFile.json disambiguates output
+                    # when multiple reporters are active.
+                    cmd += [
+                        "--reporter=default",
+                        "--reporter=json",
+                        f"--outputFile.json={json_output_path}",
+                    ]
                     if coverage:
                         cmd += ["--coverage", "--coverage.reporter=json"]
                 else:
@@ -156,7 +163,11 @@ def run_tests(project_dir, pm, framework, scheme=None, coverage=True):
         else:
             cmd = ["npx", "vitest", "run"]
 
-        cmd += ["--reporter=json", f"--outputFile={json_output_path}"]
+        cmd += [
+            "--reporter=default",
+            "--reporter=json",
+            f"--outputFile.json={json_output_path}",
+        ]
         if coverage:
             cmd += ["--coverage", "--coverage.reporter=json"]
     else:
@@ -186,12 +197,12 @@ def run_tests(project_dir, pm, framework, scheme=None, coverage=True):
 # Result parsing
 # ---------------------------------------------------------------------------
 
-def parse_jest_json(json_path, raw_output):
+def parse_jest_json(json_path, raw_output, diagnostics=None):
     """
     Parse Jest JSON output.
-    Returns (total, passed, failed, skipped, test_suites, failures).
+    Returns same shape as parse_vitest_json.
     """
-    data = _load_json_results(json_path, raw_output)
+    data = _load_json_results(json_path, raw_output, diagnostics)
     if not data:
         return None
 
@@ -224,12 +235,12 @@ def parse_jest_json(json_path, raw_output):
     }
 
 
-def parse_vitest_json(json_path, raw_output):
+def parse_vitest_json(json_path, raw_output, diagnostics=None):
     """
     Parse Vitest JSON output.
     Returns same shape as parse_jest_json.
     """
-    data = _load_json_results(json_path, raw_output)
+    data = _load_json_results(json_path, raw_output, diagnostics)
     if not data:
         return None
 
@@ -282,15 +293,29 @@ def parse_vitest_json(json_path, raw_output):
     }
 
 
-def _load_json_results(json_path, raw_output):
-    """Try to load JSON from file, then from raw output as fallback."""
-    # Try the JSON output file first
+def _load_json_results(json_path, raw_output, diagnostics=None):
+    """Try to load JSON from file, then from raw output as fallback.
+
+    If ``diagnostics`` is a list, appends human-readable reasons when the
+    JSON file exists but can't be parsed — so failures don't vanish silently.
+    """
     if json_path and os.path.exists(json_path):
         try:
             with open(json_path) as f:
-                return json.load(f)
-        except (json.JSONDecodeError, IOError):
-            pass
+                content = f.read()
+            stripped = content.strip()
+            if not stripped:
+                if diagnostics is not None:
+                    diagnostics.append(f"JSON output file is empty: {json_path}")
+            else:
+                try:
+                    return json.loads(stripped)
+                except json.JSONDecodeError as e:
+                    if diagnostics is not None:
+                        diagnostics.append(f"JSON output file is malformed ({e}): {json_path}")
+        except IOError as e:
+            if diagnostics is not None:
+                diagnostics.append(f"Could not read JSON output file ({e}): {json_path}")
 
     # Fallback: try to extract JSON from raw output
     # Jest sometimes writes JSON to stdout
@@ -327,27 +352,41 @@ def parse_fallback(raw_output):
     skipped = 0
     failures = []
 
-    # Jest text summary: Tests: X failed, Y passed, Z total
-    jest_summary = re.search(
-        r"Tests:\s+(?:(\d+)\s+failed,?\s*)?(?:(\d+)\s+skipped,?\s*)?(?:(\d+)\s+passed,?\s*)?(\d+)\s+total",
-        raw_output,
-    )
-    if jest_summary:
-        failed = int(jest_summary.group(1) or 0)
-        skipped = int(jest_summary.group(2) or 0)
-        passed = int(jest_summary.group(3) or 0)
-        total = int(jest_summary.group(4) or 0)
+    # Jest summary line: "Tests:   2 failed, 3 passed, 5 total"
+    # Token-based parse so any ordering of failed/passed/skipped works.
+    jest_summary_line = re.search(r"^\s*Tests:.*?\btotal\b", raw_output, re.MULTILINE)
+    if jest_summary_line:
+        line = jest_summary_line.group(0)
+        for m in re.finditer(r"(\d+)\s+(failed|passed|skipped|todo|total)", line):
+            n, kind = int(m.group(1)), m.group(2)
+            if kind == "failed":
+                failed = n
+            elif kind == "passed":
+                passed = n
+            elif kind in ("skipped", "todo"):
+                skipped += n
+            elif kind == "total":
+                total = n
 
-    # Vitest text summary: Tests  X failed | Y passed (Z)
-    vitest_summary = re.search(
-        r"Tests\s+(?:(\d+)\s+failed\s*\|?\s*)?(?:(\d+)\s+skipped\s*\|?\s*)?(?:(\d+)\s+passed)?\s*\((\d+)\)",
-        raw_output,
-    )
-    if vitest_summary and total == 0:
-        failed = int(vitest_summary.group(1) or 0)
-        skipped = int(vitest_summary.group(2) or 0)
-        passed = int(vitest_summary.group(3) or 0)
-        total = int(vitest_summary.group(4) or 0)
+    # Vitest summary line: "Tests  2 failed | 3 passed (5)" or "Tests  5 passed (5)"
+    # Token-based parse; the "(N)" at the end is authoritative for the total.
+    if total == 0:
+        vitest_summary_line = re.search(
+            r"^\s*Tests\s+.*?\(\s*\d+\s*\)\s*$", raw_output, re.MULTILINE,
+        )
+        if vitest_summary_line:
+            line = vitest_summary_line.group(0)
+            for m in re.finditer(r"(\d+)\s+(failed|passed|skipped|todo)", line):
+                n, kind = int(m.group(1)), m.group(2)
+                if kind == "failed":
+                    failed = n
+                elif kind == "passed":
+                    passed = n
+                elif kind in ("skipped", "todo"):
+                    skipped += n
+            paren = re.search(r"\(\s*(\d+)\s*\)\s*$", line)
+            if paren:
+                total = int(paren.group(1))
 
     # Extract failure details from text output
     fail_pattern = re.compile(r"(?:FAIL|FAILED)\s+([^\n]+)\n([\s\S]*?)(?=(?:FAIL|PASS|Test Suites:|$))")
@@ -637,11 +676,13 @@ def main():
         coverage=collect_coverage,
     )
 
-    # Parse results
+    # Parse results. Collect JSON-load diagnostics so we can report why parsing
+    # failed (empty file, malformed JSON) rather than silently falling through.
+    json_diagnostics = []
     if framework == "vitest":
-        results = parse_vitest_json(json_path, raw_output)
+        results = parse_vitest_json(json_path, raw_output, json_diagnostics)
     else:
-        results = parse_jest_json(json_path, raw_output)
+        results = parse_jest_json(json_path, raw_output, json_diagnostics)
 
     # Fallback to text parsing if JSON didn't work
     if not results or results["total"] == 0:
@@ -653,34 +694,46 @@ def main():
         exclude_patterns=args.exclude_from_coverage,
     ) if collect_coverage else None
 
-    # Clean up JSON output file
+    print_table(results, coverage=coverage)
+
+    parsed_ok = bool(results) and results["total"] > 0
+
+    # Diagnostic output when no results were parsed OR the test runner exited
+    # non-zero despite parsed results (coverage threshold, setup warnings, etc.).
+    needs_diagnostic = (not parsed_ok) or returncode != 0
+    if needs_diagnostic:
+        print("\n--- Diagnostic Info ---")
+        if returncode != 0:
+            print(f"Test runner returned exit code {returncode}")
+        if not parsed_ok:
+            print("Tests ran but no results were parsed.")
+        for diag in json_diagnostics:
+            print(diag)
+        if json_path and os.path.exists(json_path):
+            print(f"JSON output file preserved for inspection: {json_path}")
+
+        lines = raw_output.strip().splitlines()
+        # Only strip deep-nested stack frames ("    at ... node_modules/..."),
+        # not top-level error messages that happen to mention node_modules —
+        # those are often the only clue to vitest setup failures.
+        node_stack_re = re.compile(r"^\s+at\s+.*node_modules/")
+        filtered = [l for l in lines if l.strip() and not node_stack_re.match(l)]
+        display = filtered if filtered else lines
+        print("\nLast 50 lines of output:")
+        print("\n".join(display[-50:]))
+
+    # Clean up JSON output file last, so diagnostics above can reference it.
     if json_path and os.path.exists(json_path):
         try:
             os.remove(json_path)
         except OSError:
             pass
 
-    print_table(results, coverage=coverage)
-
-    # Diagnostic output when no results were parsed
-    if not results or results["total"] == 0:
-        print("\n--- Diagnostic Info ---")
-        if returncode != 0:
-            print(f"Test runner returned exit code {returncode}")
-        else:
-            print("Tests ran but no results were parsed.")
-
-        lines = raw_output.strip().splitlines()
-        # Filter node_modules noise
-        filtered = [l for l in lines if "node_modules/" not in l and l.strip()]
-        display = filtered if filtered else lines
-        print("\nLast 50 lines of output:")
-        print("\n".join(display[-50:]))
-
-        if returncode != 0:
-            sys.exit(1)
-        return
-
+    # Exit 1 only when we genuinely can't parse results or there are failures.
+    # A non-zero returncode with passing tests (e.g. coverage threshold warning)
+    # should not mask a successful run.
+    if not parsed_ok:
+        sys.exit(1)
     if results["failed"] > 0:
         sys.exit(1)
 

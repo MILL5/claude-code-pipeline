@@ -1,0 +1,25 @@
+name: Chore / Tech Debt
+description: Refactor, cleanup, or deferred work (including items surfaced by /orchestrate)
+labels: ["type: chore"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: One-line summary of the work.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context / Origin
+      description: What surfaced this? What's the underlying problem or opportunity?
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance
+      description: What does "done" look like? (optional — helpful for AI-deferred items)
+    validations:
+      required: false

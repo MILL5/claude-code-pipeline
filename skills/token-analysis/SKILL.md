@@ -131,24 +131,43 @@ If none of these thresholds are met, output `FINDINGS: NONE` and stop.
 
 ## Issue Filing
 
-If significant findings exist, file a GitHub issue on the pipeline repo.
+If significant findings exist, file a backlog issue via the shared backlog-file
+utility. Opt-in detection, label application, and traceability fields are all
+handled by the utility — do not shell out to `gh issue create` directly.
 
-### Derive Repo Identifier
-
-The orchestrator provides the pipeline repo's `owner/repo` in the prompt. Use it directly.
-
-### Create the Issue
+### Invoke the Utility
 
 ```bash
-gh issue create \
-  --repo <owner/repo> \
+python3 <pipeline_root>/scripts/backlog_file.py \
   --title "pipeline-tokens: <one-line summary of top finding>" \
-  --label "token-analysis" \
-  --body "<issue body>"
+  --type chore \
+  --priority p2 \
+  --body-context-json '{
+    "phase": "token-analysis",
+    "pr_number": "<PR_NUMBER>",
+    "run_id": "<RUN_ID>",
+    "reasoning": "<one-line: why this is Sonnet/Opus-tier, always defers>",
+    "summary": "<top finding summary>",
+    "context": "<full findings markdown body — use the template below>"
+  }'
 ```
 
-If `gh issue create` fails due to a missing `token-analysis` label, retry without the
-`--label` flag.
+The utility:
+- Detects opt-in via `.github/pipeline-backlog.yml` — skips silently if absent.
+- Applies labels `type: chore`, `priority: p2`, `source: ai-deferred`.
+- Includes the D8 traceability block in the body.
+- Retries without `source: ai-deferred` if the label isn't yet provisioned.
+- Returns a JSON result (`{"status": "filed" | "skipped" | "failed", ...}`).
+
+Token-analysis findings are always tier=defer (the classification decision is
+trivially always "defer" per the issue spec — token-level anomalies never fold).
+
+If the utility returns `status: skipped` (repo not opted in), output
+`FINDINGS: SKIPPED (backlog integration not enabled)` and stop. If `status: failed`,
+surface the reason in the run log but do not error out.
+
+The `context` field should hold the full findings markdown (cost breakdown,
+model distribution, findings list) that was previously the body of the issue.
 
 ### Issue Body Template
 

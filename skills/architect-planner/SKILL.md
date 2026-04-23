@@ -210,6 +210,27 @@ exist at the same dependency level, split them into separate waves (e.g., Wave 1
 This keeps individual agent calls under ~50K input tokens and reduces blast radius — a failure
 in one batch doesn't require re-running the other batch.
 
+### Step 7: Classify Out-of-Scope Items (Backlog Deferral)
+
+While decomposing the feature, you will often notice work that is *adjacent but
+out-of-scope* — tech debt in a touched module, a missing abstraction that would
+pay off later, a test coverage gap, a refactor opportunity. Do not silently drop
+these. Classify each using the same model assignment rubric from Step 5:
+
+- **Haiku-tier** (mechanical, <150 lines, fully specified, single file) → **fold**
+  into the current plan as a trivial extra task, subject to the orchestrator's
+  run-level fold cap. Add it to a wave; mark it `source: folded-from-backlog-candidate`.
+- **Sonnet/Opus-tier** (requires design decisions, multi-file, non-trivial
+  reasoning) → **defer**. List it in the plan's **Deferred Items** section with a
+  one-line reasoning. The orchestrator will file these as GitHub issues via the
+  shared backlog utility when the consumer repo is opted in (sentinel
+  `.github/pipeline-backlog.yml` present). If the repo is not opted in, deferred
+  items still appear in the plan — the orchestrator will skip filing silently.
+
+**Do not invent deferred items.** Only classify items you would otherwise have
+dropped from the plan because they're out-of-scope. The goal is durable capture,
+not padding.
+
 ## Output Format
 
 The plan MUST be output as a structured document following this exact format:
@@ -291,6 +312,16 @@ The plan MUST be output as a structured document following this exact format:
 ## Risk Notes
 - [Any tasks where the model assignment is borderline]
 - [Any tasks where Haiku might need a retry, and what the fallback is]
+
+## Deferred Items
+*Items surfaced during planning that are out-of-scope for the current feature.*
+*The orchestrator will file these to the backlog when the consumer repo is opted in.*
+
+- **Title:** [one-line title]
+  **Type:** chore | bug | feature | docs
+  **Priority:** p2 (default for ai-deferred)
+  **Reasoning:** [why this is out-of-scope AND why it cannot be folded]
+  **Origin:** [which file/module prompted this observation]
 ```
 
 ## Decomposition Quality Checks

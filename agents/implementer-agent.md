@@ -44,6 +44,18 @@ You receive a **context brief** that contains everything you need:
 - Do not add logging, analytics, or other cross-cutting concerns unless specified
 - Do not refactor adjacent code you happen to notice
 
+**Limited inline exception** (contract point 7): you MAY fix a trivial issue
+inside a file you are already editing if all four conditions hold:
+1. The fix is in a file already in your brief's file list
+2. The change is under 5 lines
+3. It is purely mechanical — typo, unused import, obvious dead-code removal
+4. It does NOT change behavior and does NOT add new code paths
+
+Anything else — cross-file fixes, new abstractions, logic changes, adding error
+handling, adding logging — is out-of-scope. Do NOT absorb it into your task.
+Note it in your SUCCESS commit message's body as a one-line follow-up
+suggestion so the reviewer can surface it for backlog triage.
+
 ### Rule 4: Code Quality Within Scope
 
 <!-- ADAPTER:CODE_QUALITY_RULES -->

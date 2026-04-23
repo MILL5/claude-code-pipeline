@@ -271,6 +271,35 @@ accumulates token usage data for every agent call throughout the pipeline. Also 
 3. If the TOKEN_REPORT is missing or malformed, leave those fields empty — do not fail.
 4. Append the entry to `TOKEN_LEDGER`.
 
+## Step 0.65: Initialize Backlog Integration State
+
+Before Step 1a runs, bootstrap two artifacts in `.claude/tmp/` that the backlog
+integration depends on:
+
+1. **Run ID** — `.claude/tmp/run-id`: a timestamp-based identifier for this
+   orchestrate run (`YYYYMMDD-HHMMSS`, e.g. `20260423-181500`). Generate at
+   pipeline start. Every backlog issue filed during this run embeds this ID in
+   its traceability block (D8).
+2. **Run log** — `.claude/tmp/run-log.yml`: accumulates fold/defer decisions
+   across phases. Initialize with an empty `backlog_decisions: []` array if the
+   file does not already exist (a resumed run should preserve prior entries).
+
+```bash
+date +%Y%m%d-%H%M%S > .claude/tmp/run-id
+test -f .claude/tmp/run-log.yml || printf 'backlog_decisions: []\n' > .claude/tmp/run-log.yml
+```
+
+**Backlog opt-in detection**: check for `.github/pipeline-backlog.yml` at the
+project root. Set `BACKLOG_ENABLED=true|false` for downstream phases. Re-check
+at the start of each filing call — `/bootstrap-backlog` can be run mid-session,
+and subsequent phases should pick up the new sentinel without restart.
+
+If `BACKLOG_ENABLED=false`, phases still emit fold/defer classifications into
+`run-log.yml` (so the user sees what would have been filed), but no `gh issue
+create` call is made. Emit exactly one hint on the first skipped filing:
+`backlog integration not enabled for this repo — run /bootstrap-backlog to enable`.
+Subsequent skips in the same run are silent.
+
 ## Step 0.7: Prepare ORCHESTRATOR.md Extracts
 
 Read `.claude/ORCHESTRATOR.md` once at pipeline start. Instead of pasting the full file into
@@ -495,6 +524,10 @@ modeling). See Step 2.5 in the planner skill.
 - Are waves and dependencies sensible?
 - Are context briefs self-contained and free of "see task X" cross-references?
 
+If the plan includes a `## Deferred Items` section, process each entry per the
+**Backlog Integration** section below (fold or defer). Do this before presenting
+the plan to the user so the folded items appear in the wave list.
+
 Present the plan summary to the user and wait for confirmation before proceeding.
 
 **Token tracking:** Record a `TOKEN_LEDGER` entry for the initial 1b agent launch (step `1b`). If implementation clarification questions occur, record each SendMessage round as step `1b:impl-clarify-N`. If plan revisions are requested, record each revision round as step `1b:revision-N`. Agent: `architect-agent`, model: as selected above (`sonnet` or `opus`).
@@ -639,6 +672,12 @@ agent for tasks 9+. This prevents context window saturation from accumulated rev
 
 - If `PASS`: proceed to Step 3 (commit)
 - If `FAIL`: proceed to Step 2.2 (fix)
+
+**Backlog classification:** after handling PASS/FAIL, parse the
+`--- OPTIONAL IMPROVEMENTS ---` section. Each entry is tagged `[should-fix]` or
+`[nice-to-have]`. For each, apply the fold-vs-defer rule in the Backlog
+Integration section below. This happens after the pass/fail handshake — do not
+let it block the review cycle.
 
 **Token tracking:** Record a `TOKEN_LEDGER` entry for each review (step `2.1:<task_id>`). Agent: `code-reviewer-agent`, model: `sonnet`. For SendMessage reviews, `input_chars` is the SendMessage content (not the full accumulated context).
 
@@ -917,6 +956,10 @@ After all tasks are committed and pushed:
    - Commit and push the update
 2. Update the PR body's Coverage section with final numbers from the last test run
 3. Check off completed tasks in the PR body's task list
+3.5. If `BACKLOG_ENABLED=true` and `.claude/tmp/run-log.yml` has any entries with
+   `action: folded`, render the "Folded in this run" checklist into the PR body
+   (see the Backlog Integration section for the format). Skip this if no folds
+   occurred.
 4. Mark the PR as ready for review:
    ```bash
    gh pr ready <PR_NUMBER>
@@ -1002,6 +1045,121 @@ Prompt: |
 
 ---
 
+## Backlog Integration
+
+When `/orchestrate` runs in a repo opted in via `.github/pipeline-backlog.yml`,
+out-of-scope items surfaced by the planner and reviewer are classified as
+**fold** (spawn a new implementer task in this run) or **defer** (file a GitHub
+issue via `scripts/backlog_file.py`). This closes the durable-capture gap —
+items like "extract this common helper" or "this file has a stale comment"
+stop evaporating between runs.
+
+### Fold vs. Defer Decision Rule
+
+Use the planner's existing Haiku/Sonnet classification rubric
+(`architect-planner/SKILL.md` Step 5 "Assign Models") as the boundary:
+
+- **Haiku-tier** — mechanical, <150 lines, single-file, fully-specified → **fold**.
+- **Sonnet/Opus-tier** — design decisions, multi-file, moderate-to-high reasoning
+  → **defer** (file to backlog).
+
+Reviewer guidance: `[should-fix]` entries with Haiku-tier fix are fold
+candidates; `[nice-to-have]` entries default-defer regardless of tier.
+
+### Run-Level Fold Cap
+
+Read `fold_cap` from `.github/pipeline-backlog.yml` (default 3, `0` = never
+fold). Before folding a new item, count entries in `.claude/tmp/run-log.yml`
+where `action: folded`. If that count is already at the cap, treat this item
+as **defer** regardless of its tier.
+
+Fold cap applies across ALL phases combined — not per-phase. This prevents
+reviewer and planner from collectively turning into a second round of
+implementation work.
+
+### Filing a Deferred Item
+
+Use the shared utility — do not shell out to `gh` directly:
+
+```bash
+python3 .claude/pipeline/scripts/backlog_file.py \
+  --title "<short imperative title>" \
+  --type chore --priority p2 \
+  --body-context-json '{
+    "phase": "reviewer",
+    "pr_number": "'"$PR_NUMBER"'",
+    "run_id": "'"$(cat .claude/tmp/run-id)"'",
+    "reasoning": "<one-line: why this defers, not folds>",
+    "summary": "<one-line summary>",
+    "context": "<multi-line context from the surfacing phase>"
+  }'
+```
+
+Parse the utility's JSON output. Possible outcomes:
+- `{"status": "filed", "url": "...", "number": N}` — issue created, append to
+  `backlog_decisions` with `action: deferred` and `issue_url`.
+- `{"status": "skipped", "reason": "..."}` — sentinel absent or disabled;
+  append to `backlog_decisions` with `action: skipped` and emit the one-time
+  hint if this is the first skip of the run.
+- `{"status": "failed", "reason": "..."}` — `gh` errored; append with
+  `action: failed` and `issue_url: null`, log a warning, continue the run.
+
+### Folding an Item (spawn new implementer task)
+
+Add the item to the next available wave as a new Haiku task with a fresh brief
+that satisfies all 6 contract points (see `agents/implementer-contract.md`).
+Append a `backlog_decisions` entry with `action: folded` and a one-line
+reasoning. Count this entry against the fold cap.
+
+### Run-Log Schema
+
+`.claude/tmp/run-log.yml` accumulates decisions across phases:
+
+```yaml
+backlog_decisions:
+  - phase: reviewer              # planner | reviewer | implementer | token-analysis
+    title: "Extract common Grok error mapper"
+    classification: sonnet       # haiku | sonnet | opus | trivial
+    action: deferred             # folded | deferred | skipped | failed
+    issue_url: "https://github.com/.../issues/42"   # present when action=deferred
+    issue_number: 42
+    reasoning: "Cross-cuts 4 files, adds new abstraction — Sonnet-tier"
+  - phase: implementer
+    title: "Typo in error message at src/tools/grok_client.py:42"
+    classification: trivial
+    action: folded
+    reasoning: "<5 LOC mechanical fix in file already being edited"
+```
+
+### PR Description — Folded Checklist
+
+At Step 4 (Finalize), when `BACKLOG_ENABLED=true`, read `run-log.yml` and
+render a "Folded in this run" checklist into the PR body before marking it
+ready for review:
+
+```markdown
+## Folded in this run
+- [x] Extracted common validation helper (implementer, wave 2) — <commit SHA>
+- [x] Fixed typo in error message at src/tools/grok_client.py (implementer, wave 1) — inline
+```
+
+Deferred items are NOT listed in the PR body — they have their own GitHub
+issues (linked via traceability block, which auto-backlinks to the originating
+PR). If no folds occurred, omit the section entirely.
+
+### Phase Integration Summary
+
+- **Step 1b (planner)**: planner outputs a `Deferred Items` section. Orchestrator
+  iterates each, classifies, folds or files per the rule above.
+- **Step 2.1 (reviewer)**: each `[should-fix]` / `[nice-to-have]` entry in
+  OPTIONAL IMPROVEMENTS is classified. Orchestrator folds or files.
+- **Step 2 (implementer)**: implementer's SUCCESS commit message may include a
+  "Follow-up" suggestion line — surface to reviewer, who classifies it with the
+  rest.
+- **Step 5 (token-analysis)**: token-analysis findings always defer (per spec).
+  The skill itself invokes `scripts/backlog_file.py`; orchestrator records the
+  outcome in `run-log.yml`.
+
 ## Parallelization Rules
 
 - **Within a wave:** launch all implementer agents simultaneously (parallel)
@@ -1026,6 +1184,9 @@ Prompt: |
 | Token analysis skill fails | Log warning, report to user, do not block pipeline completion |
 | `gh issue create` fails (missing label, auth, etc.) | Retry without `--label`, report failure if still errors |
 | Pipeline repo has no GitHub remote | Skip issue filing, report token summary to user directly |
+| Backlog sentinel absent | Phase classifications still recorded in run-log; no `gh` calls; emit one-line hint on first skip |
+| Backlog filing returns `failed` | Record `action: failed` in run-log with reason; continue pipeline |
+| Fold cap reached mid-run | Treat subsequent fold candidates as deferrals regardless of tier |
 
 ## What the Orchestrator Does NOT Do
 

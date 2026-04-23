@@ -107,6 +107,25 @@ class TestReviewerProtocol(unittest.TestCase):
         report = parse_token_report(fixture)
         self.assertIsNotNone(report)
 
+    def test_tagged_optional_suggestions(self) -> None:
+        fixture = (FIXTURES_DIR / "reviewer-pass-with-optional-tagged.txt").read_text()
+        result = parse_reviewer_result(fixture)
+        self.assertEqual(result["status"], "PASS")
+        suggestions = result["suggestions"]
+        self.assertEqual(len(suggestions), 2)
+        tags = {s["tag"] for s in suggestions}
+        self.assertEqual(tags, {"should-fix", "nice-to-have"})
+        for s in suggestions:
+            self.assertTrue(s["text"])
+            self.assertFalse(s["text"].startswith("["))
+
+    def test_untagged_entries_preserve_null_tag(self) -> None:
+        fixture = (FIXTURES_DIR / "reviewer-fail.txt").read_text()
+        result = parse_reviewer_result(fixture)
+        for entry in result["optional_improvements"]:
+            self.assertIn("tag", entry)
+            self.assertIn("text", entry)
+
 
 class TestBuildOutput(unittest.TestCase):
     def test_success_output(self) -> None:

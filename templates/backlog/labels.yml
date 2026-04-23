@@ -1,0 +1,53 @@
+# Pipeline backlog label taxonomy.
+# Consumed by /bootstrap-backlog to provision labels via `gh label create --force`.
+# Do not delete existing labels here — bootstrap is additive-only.
+
+labels:
+  # type: * — exactly one per issue
+  - name: "type: bug"
+    color: "d73a4a"
+    description: "Something isn't working"
+  - name: "type: feature"
+    color: "a2eeef"
+    description: "New capability"
+  - name: "type: chore"
+    color: "fef2c0"
+    description: "Tech debt, refactor, cleanup"
+  - name: "type: docs"
+    color: "0075ca"
+    description: "Documentation only"
+
+  # priority: * — exactly one per issue
+  - name: "priority: p0"
+    color: "b60205"
+    description: "Drop everything"
+  - name: "priority: p1"
+    color: "d93f0b"
+    description: "Next sprint"
+  - name: "priority: p2"
+    color: "fbca04"
+    description: "Backlog"
+
+  # status: * — default on creation, updated during triage
+  - name: "status: needs-triage"
+    color: "ededed"
+    description: "Default on new issues"
+  - name: "status: blocked"
+    color: "e4e669"
+    description: "Blocked by external dependency"
+  - name: "status: ready"
+    color: "0e8a16"
+    description: "Triaged, ready to pick up"
+
+  # source: * — provenance
+  - name: "source: ai-deferred"
+    color: "5319e7"
+    description: "Filed by /orchestrate run"
+
+  # GitHub specials — retained, not reprovisioned
+  - name: "good first issue"
+    color: "7057ff"
+    description: "Good for newcomers"
+  - name: "help wanted"
+    color: "008672"
+    description: "Extra attention is needed"

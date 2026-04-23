@@ -85,6 +85,20 @@ REQUIRED_SKILLS = [
     "azure-drift-check/SKILL.md",
     "azure-login/SKILL.md",
     "update-pipeline/SKILL.md",
+    "bootstrap-backlog/SKILL.md",
+]
+
+REQUIRED_BACKLOG_TEMPLATES = [
+    "templates/backlog/ISSUE_TEMPLATE/bug_report.yml",
+    "templates/backlog/ISSUE_TEMPLATE/feature_request.yml",
+    "templates/backlog/ISSUE_TEMPLATE/chore.yml",
+    "templates/backlog/ISSUE_TEMPLATE/config.yml",
+    "templates/backlog/labels.yml",
+    "templates/backlog/pipeline-backlog.yml.template",
+]
+
+REQUIRED_SCRIPTS = [
+    "scripts/backlog_file.py",
 ]
 
 ESSENTIAL_OVERLAY_MAX_CHARS = 1000
@@ -199,6 +213,20 @@ def check_required_files(result: ValidationResult) -> None:
             result.ok(f"Template exists: {template}")
         else:
             result.fail(f"Missing template: {template}")
+
+    for backlog_template in REQUIRED_BACKLOG_TEMPLATES:
+        path = PIPELINE_ROOT / backlog_template
+        if path.exists():
+            result.ok(f"Backlog template exists: {backlog_template}")
+        else:
+            result.fail(f"Missing backlog template: {backlog_template}")
+
+    for script in REQUIRED_SCRIPTS:
+        path = PIPELINE_ROOT / script
+        if path.exists():
+            result.ok(f"Script exists: {script}")
+        else:
+            result.fail(f"Missing script: {script}")
 
 
 def check_adapter_completeness(result: ValidationResult) -> None:

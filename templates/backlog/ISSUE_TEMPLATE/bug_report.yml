@@ -1,0 +1,40 @@
+name: Bug Report
+description: Report something that isn't working as expected
+labels: ["type: bug", "status: needs-triage"]
+body:
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Minimum steps to reproduce the bug.
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What you expected to happen.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What actually happened. Include error messages, logs, screenshots.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, tool versions, any relevant config.
+      placeholder: |
+        - OS: macOS 14.5
+        - Tool / runtime: ...
+        - Relevant versions: ...
+    validations:
+      required: true

@@ -1,0 +1,5 @@
+# Valid sentinel config fixture for backlog utility tests.
+version: 1
+enabled: true
+fold_cap: 3
+project_number: null

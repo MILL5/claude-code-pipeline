@@ -380,6 +380,14 @@ Prompt: |
 
 **Token tracking:** Record a `TOKEN_LEDGER` entry after the initial agent launch (step `1a`) and after each SendMessage round in the clarification loop (step `1a:clarify-N`). For each entry, measure the composed prompt as `input_chars` and the agent's response as `output_chars`. Agent: `architect-agent`, model: `sonnet`.
 
+**TOKEN_LEDGER gate:** After Step 1a completes and `.claude/tmp/1a-spec.md` is written,
+verify that `TOKEN_LEDGER` contains at least one entry. If the ledger is empty, warn the user:
+
+> ⚠ TOKEN_LEDGER is empty after Step 1a — token tracking was skipped. Step 5 analysis
+> will reconstruct from `<usage>` blocks with reduced accuracy.
+
+Do NOT abort the pipeline. Continue with implementation but note the tracking gap.
+
 **Recovery:** If the pipeline is interrupted after 1a and `.claude/tmp/1a-spec.md` exists, skip 1a entirely and go directly to 1b. If `.claude/tmp/1b-plan.md` also exists, skip both 1a and 1b — present the saved plan to the user for confirmation and proceed to Step 1.5.
 
 ---

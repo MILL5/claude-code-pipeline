@@ -20,6 +20,42 @@ Before starting, read these files (skip if already in context from this session)
 1. `.claude/ORCHESTRATOR.md` — architecture, conventions, fragile areas
 2. `.claude/CLAUDE.md` — project rules (file limits, mandatory skills, etc.)
 
+### SendMessage availability
+
+This skill relies on `SendMessage` for token-efficient agent continuation in Steps 1a,
+1b, 2.1, and 3.5. `SendMessage` is an experimental Claude Code tool gated behind the
+`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` environment variable.
+
+**To enable** (persists across sessions — add to `~/.claude/settings.json`):
+```json
+{
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  }
+}
+```
+Restart Claude Code, then verify with `ToolSearch: select:SendMessage` — the schema should load.
+
+**Addressing:** `SendMessage` must use the agent's **UUID** (the `agentId:` value in the
+`Agent` tool's output), NOT the `name:` field. Named routing requires `TeamCreate` registration
+and is not used by this skill. Example:
+
+> After `Agent({ name: "wave-reviewer", ... })` returns, the output includes a line like:
+> `agentId: ad67fc84c7259e8ad`
+> Capture that UUID. All subsequent `SendMessage` calls use it:
+> `SendMessage({ to: "ad67fc84c7259e8ad", message: "..." })`
+
+**Async semantics:** `SendMessage` is fire-and-notify, not request-and-wait. The call returns
+immediately; the resumed agent's reply arrives later as a `<task-notification>`. The
+clarification loops in Steps 1a and 1b work as follows: relay questions to the user, receive
+answers, call `SendMessage` with the UUID, then wait for the `<task-notification>` before
+proceeding to the next step.
+
+**Fallback when unavailable:** If `ToolSearch: select:SendMessage` returns no matches (env var
+not set), launch a fresh `Agent` with prior context re-embedded in the prompt for each
+continuation. Accept the ~30–40% higher input token cost. Do NOT attempt `SendMessage` when
+the tool is unavailable — the call will fail with "No matching deferred tools found".
+
 ## Step 0: Load Adapters
 
 Before any agent launches, determine the active tech-stack adapters:

@@ -48,6 +48,15 @@ implementation cost — use **50/40/10** as the comparison baseline instead. Ide
 plan type from the 1b-plan.md `## Overview` section or the PR title prefix (`refactor:`).
 Flag deviations only against the appropriate baseline.
 
+**Small-plan adjustment:** When the 1b-plan contains **fewer than 4 implementation tasks**,
+fixed Sonnet-tier overhead (1a spec, 1b plan, 1.5 draft-PR setup, plus one reviewer per wave)
+dominates the run. On a 2-task micro-plan this overhead is typically ~$0.40 — more than any
+plausible Haiku spend. The 70/20/10 target is structurally unreachable regardless of planner
+quality. **In this case, do not flag model-distribution deviations at all**; instead include a
+one-line note: *"Small plan (N tasks): fixed overhead dominates — 70/20/10 not evaluable."*
+Continue to compute and report the distribution for visibility, but skip the 15pp-deviation
+gate for all three models.
+
 Compute each model's share as: `model_cost / total_cost × 100`. Report BOTH cost-weighted
 percentages AND call-count percentages — but flag deviations based on the cost metric only.
 Call-count percentages can create a false sense of efficiency (e.g., "69% Haiku calls" while
@@ -120,7 +129,7 @@ significant finding.
 ## Significance Threshold
 
 Only file a GitHub issue if **at least ONE** of these conditions is met:
-- Model distribution deviates > 15 percentage points from the 70/20/10 target on any model
+- Model distribution deviates > 15 percentage points from the 70/20/10 target on any model (suppressed for small plans — see "Small-plan adjustment" above)
 - Total escalation + retry cost exceeds 25% of total pipeline cost
 - Any anomaly from Section 6 is detected
 - 3 or more prompt efficiency flags from Section 3

@@ -160,14 +160,16 @@ This is the critical differentiator. Each task needs a **context brief** — the
 A context brief includes:
 
 1. **Objective**: One sentence, what this task produces
-2. **File(s) to create/modify**: Exact paths
-3. **Inputs**: What files, types, interfaces this task depends on (provide the actual code/signatures, not references to other tasks)
-4. **Output specification**: Exact public API, method signatures, expected behavior
-5. **Constraints**: Naming conventions, patterns to follow, error handling approach. For Haiku tasks, embed the 1-2 most relevant rules from the adapter's `implementer-overlay-essential.md` that apply to this specific task (e.g., "Cleanup all effects in useEffect return function" for a component with side effects, or "Use `raise ... from e` to preserve exception chains" for error handling code). This makes the brief self-contained and targeted — the implementer does not need to scan the full overlay.
-6. **Verification**: How to know the task is done correctly — use the stack-specific build and test commands: `python3 .claude/scripts/<stack>/build.py` and `python3 .claude/scripts/<stack>/test.py`
-7. **Anti-patterns**: Common mistakes to avoid for this specific task (1-2 max)
+2. **File(s) to create/modify**: Exact paths. The implementer MUST NOT touch files outside this list.
+3. **FORBIDDEN in this task**: Anti-patterns and explicit prohibitions, stated up front so they survive Haiku's context compression. Phrase each as a negative imperative ("Do NOT add `globals: true`", "Do NOT import from `src/legacy/`"). Keep to 1-3 items — specific to this task, not generic overlay rules.
+4. **Inputs**: What files, types, interfaces this task depends on (provide the actual code/signatures, not references to other tasks)
+5. **Output specification**: Exact public API, method signatures, expected behavior
+6. **Constraints**: Naming conventions, patterns to follow, error handling approach. For Haiku tasks, embed the 1-2 most relevant rules from the adapter's `implementer-overlay-essential.md` that apply to this specific task (e.g., "Cleanup all effects in useEffect return function" for a component with side effects, or "Use `raise ... from e` to preserve exception chains" for error handling code). This makes the brief self-contained and targeted — the implementer does not need to scan the full overlay.
+7. **Verification**: How to know the task is done correctly — use the stack-specific build and test commands: `python3 .claude/scripts/<stack>/build.py` and `python3 .claude/scripts/<stack>/test.py`
 
 **Critical rule**: A context brief must be *self-contained*. Haiku should never need to read another task's brief to execute this one. If task B depends on task A's output, task B's brief must include the relevant interface/contract inline, not "see task A."
+
+**Why FORBIDDEN goes near the top**: Haiku tends to cargo-cult "solutions" it has seen in training and quietly ignore prohibitions buried at the bottom of a long brief. Stating them as `FORBIDDEN in this task:` right after the file list — before the agent has loaded up on output-spec momentum — materially improves adherence. Reserve this section for task-specific prohibitions only; generic stack rules belong in the implementer overlay.
 
 ### Step 5: Assign Models, Stacks, and Estimate
 
@@ -271,6 +273,12 @@ The plan MUST be output as a structured document following this exact format:
 **Context Brief:**
 > **Objective:** [One sentence]
 >
+> **File(s):** `path/to/File` — do NOT modify any other file.
+>
+> **FORBIDDEN in this task:**
+> - Do NOT [specific prohibition — e.g. "add `globals: true` to vitest config"]
+> - Do NOT [scope violation guard — e.g. "modify files in `src/legacy/`"]
+>
 > **Inputs:**
 > ```
 > // [Provide actual protocol/type definitions this task needs]
@@ -285,9 +293,6 @@ The plan MUST be output as a structured document following this exact format:
 > - [naming, patterns, error handling]
 >
 > **Verification:** `python3 .claude/scripts/react/build.py` succeeds, then `python3 .claude/scripts/react/test.py` passes with >=90% coverage
->
-> **Anti-patterns:**
-> - [what NOT to do]
 
 ---
 

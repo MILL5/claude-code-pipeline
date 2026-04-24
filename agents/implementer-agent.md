@@ -94,6 +94,14 @@ Fix every issue found during the code review.
 Your final output MUST follow this machine-parseable protocol so the orchestrator can
 process results without reading prose.
 
+### ⚠️ Do NOT run `git commit` or `git push`
+
+The orchestrator commits your work after a passing code review. Your job ends at
+emitting the `SUCCESS` header plus the commit-message string below — nothing more.
+Running `git commit` yourself bypasses review, prevents message amendments, and
+masks review-fix cycles. If you find a commit you made in `git log`, that is a
+protocol violation regardless of content correctness.
+
 ### Header (REQUIRED — first line of output)
 
 Exactly one of:
@@ -103,7 +111,8 @@ Exactly one of:
 ### On SUCCESS
 
 After the `SUCCESS` header, output a blank line, then a **conventional-commit message**.
-This message will be used verbatim as the git commit — no editing, no wrapping.
+This message will be used verbatim as the git commit by the orchestrator — do not run
+`git commit` yourself.
 
 Rules for the commit message:
 - First line: `<type>(<scope>): <imperative summary>` (max 72 chars)

@@ -395,6 +395,12 @@ Step 3: COMMIT + PUSH (orchestrator commits per agent, pushes to PR branch)
     |  Uses the SUCCESS message verbatim as the git commit message
     |  Record test baseline (total passing count) after all waves complete
     v
+Step 3.4: AUTOMATED BROWSER UI TEST (chrome-ui-test skill, conditional)
+    |  Auto-fires when ACTIVE_CAPABILITIES includes `browser-ui`, this run touched
+    |    browser-ui files, AND the claude-in-chrome MCP tools are loadable
+    |  Drives the dev server in Chrome via claude-in-chrome MCP tools
+    |  Returns PASS or FAIL — FAIL feeds the same bug-fix cycle as Step 3.5
+    v
 Step 3.5: MANUAL TEST (user tests PR branch)
     |  User reports bugs OR says "tests pass"
     |  Each bug: assess blast radius -> fix (Sonnet) -> review -> full test suite -> commit
@@ -764,6 +770,82 @@ Pushing after each commit keeps the draft PR up to date so progress is visible.
 
 **Record test baseline:** After committing all waves, run the full test suite and record
 the total passing test count. This is the regression baseline for Step 3.5.
+
+### Step 3.4: AUTOMATED BROWSER UI TEST (conditional)
+
+**Gating rule:** Evaluate these checks in order. Skip Step 3.4 silently at the
+first one that fails — do not run later checks (each is more expensive than
+the last).
+
+1. **Capability check** — `ACTIVE_CAPABILITIES` includes `browser-ui` (at
+   least one active stack's `manifest.json` declares this capability — `react`
+   does by default). Fast in-memory lookup.
+2. **Wave-relevance check** — at least one file in `FILES_MODIFIED` (across
+   all waves this run) resolves via `resolve_stack()` to a stack with the
+   `browser-ui` capability. Pure backend-only runs skip Step 3.4.
+3. **Tool availability check** — probe whether the `claude-in-chrome` MCP
+   tools are authorized in the current session:
+   ```
+   ToolSearch query: "select:mcp__claude-in-chrome__tabs_context_mcp"
+   ```
+   If the result contains a `<function>` schema for that tool, chrome is
+   authorized. If the result is "No matching deferred tools found" (or
+   equivalent empty result), the MCP server is not configured for this
+   session — skip Step 3.4 silently. No flag, no warning: the user simply
+   has not opted into chrome for this session.
+
+The probe in check 3 is the source of truth for "is chrome authorized?" —
+mirroring how `ACTIVE_CAPABILITIES` drives `azure-auth`. There is no
+`--chrome` flag because the MCP tool list is itself the authorization signal:
+if the user added `claude-in-chrome` to their MCP config and approved it,
+the tools are loadable; if they did not, they are not.
+
+**Invocation:**
+
+```
+Skill: chrome-ui-test
+Prompt: |
+  Read `.claude/skills/chrome-ui-test/SKILL.md` for your instructions.
+
+  IMPLEMENTATION_SUMMARY:
+  <one paragraph from the plan + commit messages, focused on user-visible behavior>
+
+  FILES_MODIFIED:
+  <list of files touched across all waves, filtered to browser-ui stacks>
+
+  TASK_BRIEFS:
+  <paste the original context briefs for tasks whose stack has browser-ui capability>
+
+  DEV_SERVER_HINT:
+  <if the project has a `dev` script in package.json, paste the script line and
+   default port; otherwise the skill will inspect package.json itself>
+
+  RECORD_GIF: <true if the user explicitly asked for a recording in their request, else false>
+```
+
+**Outcome handling:**
+
+- **PASS** — record the result in TOKEN_LEDGER and proceed to Step 3.5. The
+  user-facing prompt for manual test should mention the automated smoke
+  passed: "Automated browser smoke test passed (golden path + N edge cases).
+  Please test the branch and report any bugs..."
+- **FAIL** — treat the failure as a bug report and route it through the
+  existing Step 3.5.1 (ASSESS) → 3.5.2 (FIX) → 3.5.3 (REVIEW) → 3.5.4
+  (COMMIT) → 3.5.5 (RE-TEST) cycle. Use the skill's "Reproduction" block as
+  the bug report. After the fix is committed, re-run Step 3.4 once before
+  handing back to the user. If Step 3.4 fails twice on the same scenario,
+  stop and present the findings — do NOT loop.
+
+**Token tracking:** Record a `TOKEN_LEDGER` entry for the chrome-ui-test
+invocation (step `3.4`). Agent: `orchestrator` (skill, not an Agent launch),
+model: `sonnet` (the orchestrator's own model). If a re-run occurs after a
+fix, record it as `3.4:retry-N`.
+
+**Why this runs before Step 3.5 rather than replacing it:** The automated
+smoke catches obvious wiring failures (uncaught exceptions, missing imports,
+broken routes) before bothering the user, but it cannot judge UX, copy,
+visual correctness, or business-rule edge cases. The user's manual test
+remains authoritative.
 
 ### Step 3.5: MANUAL TEST
 
@@ -1203,6 +1285,9 @@ PR). If no folds occurred, omit the section entirely.
 | Bug fix fails review twice | Launch architect blast-radius analysis, present to user |
 | 3+ bug-fix cycles in one manual test round | Stop, report all outstanding issues for manual triage |
 | Token analysis skill fails | Log warning, report to user, do not block pipeline completion |
+| chrome-ui-test FAIL | Route into Step 3.5.1-3.5.5 bug-fix cycle using its reproduction recipe as the bug report |
+| chrome-ui-test FAIL twice on same scenario after fix | Stop Step 3.4 retries, present findings, hand to user manual test |
+| claude-in-chrome MCP tools not loadable | Skip Step 3.4 silently — user has not authorized chrome for this session |
 | `gh issue create` fails (missing label, auth, etc.) | Retry without `--label`, report failure if still errors |
 | Pipeline repo has no GitHub remote | Skip issue filing, report token summary to user directly |
 | Backlog sentinel absent | Phase classifications still recorded in run-log; no `gh` calls; emit one-line hint on first skip |

@@ -1,7 +1,7 @@
 {
   "name": "react",
   "display_name": "React / TypeScript",
-  "capabilities": [],
+  "capabilities": ["browser-ui"],
   "implies_overlays": [],
   "detection": [
     { "type": "file_contains", "path": "package.json", "pattern": "\"react\"" }

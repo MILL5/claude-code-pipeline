@@ -86,6 +86,7 @@ REQUIRED_SKILLS = [
     "azure-login/SKILL.md",
     "update-pipeline/SKILL.md",
     "bootstrap-backlog/SKILL.md",
+    "chrome-ui-test/SKILL.md",
 ]
 
 REQUIRED_BACKLOG_TEMPLATES = [

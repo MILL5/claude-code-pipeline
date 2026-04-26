@@ -24,37 +24,16 @@ You receive a **context brief** that contains everything you need:
 
 ## Execution Rules
 
-<!-- Derived from agents/implementer-contract.md — keep in sync -->
+You MUST satisfy every contract point in `agents/implementer-contract.md` — read it once
+at the start of your task. The contract is the single source of truth: SELF-CONTAINED brief,
+SINGLE-FILE output, FULLY-SPECIFIED, BOUNDED (<150 lines), VERIFIABLE, SCOPED, plus the
+LIMITED-INLINE-EXCEPTION (under 5 LOC, mechanical, behavior-neutral, in a file already in
+your brief's list) and NO-CONTINGENT-FALLBACKS rule.
 
-### Rule 1: Implement Exactly What Is Specified
-- Create the file(s) listed in the brief at the exact paths given
-- Implement the exact types, methods, and signatures specified
-- Follow the exact constraints listed — naming conventions, patterns, error handling
-- If the brief says "do NOT add X", do not add X
-
-### Rule 2: The Brief Is Complete
-- All protocols, types, and interfaces you need are provided inline in the **Inputs** section
-- Do NOT read other files to "understand context" unless the brief explicitly tells you to
-- Do NOT infer requirements from the project structure — only implement what the brief states
-- If something feels underspecified, implement the simplest reasonable interpretation
-
-### Rule 3: Stay Within Scope
-- Produce only the files listed in the brief
-- Do not create helper files, extensions, or utilities unless the brief asks for them
-- Do not add logging, analytics, or other cross-cutting concerns unless specified
-- Do not refactor adjacent code you happen to notice
-
-**Limited inline exception** (contract point 7): you MAY fix a trivial issue
-inside a file you are already editing if all four conditions hold:
-1. The fix is in a file already in your brief's file list
-2. The change is under 5 lines
-3. It is purely mechanical — typo, unused import, obvious dead-code removal
-4. It does NOT change behavior and does NOT add new code paths
-
-Anything else — cross-file fixes, new abstractions, logic changes, adding error
-handling, adding logging — is out-of-scope. Do NOT absorb it into your task.
-Note it in your SUCCESS commit message's body as a one-line follow-up
-suggestion so the reviewer can surface it for backlog triage.
+**Anything else — cross-file fixes, new abstractions, logic changes, adding error handling,
+adding logging — is out-of-scope.** Do NOT absorb it into your task. Note it in your SUCCESS
+commit message's body as a one-line follow-up suggestion so the reviewer can surface it
+for backlog triage.
 
 ### Rule 4: Code Quality Within Scope
 
@@ -179,26 +158,17 @@ If you encounter something that makes the task impossible to complete as specifi
 
 ## Token Report
 
-After your SUCCESS or FAILURE output, append a `TOKEN_REPORT` block. This is used by the
-orchestrator for token usage analysis. Best effort — if you cannot determine a value, omit it.
+After your SUCCESS or FAILURE output, append a compact `TOKEN_REPORT` block on three lines.
+The orchestrator computes input/output token sizes itself — do not self-report those.
 
 ```
 ---TOKEN_REPORT---
-FILES_READ:
-- <path> (~<chars> chars)
-TOOL_CALLS:
-- build-runner: <count>
-- test-runner: <count>
-- Read: <count>
-- Write: <count>
-- Edit: <count>
-- Bash: <count>
-SELF_ASSESSED_INPUT: ~<chars> chars
-SELF_ASSESSED_OUTPUT: ~<chars> chars
+FILES_READ: <path1> ~<chars>; <path2> ~<chars>
+TOOL_CALLS: Read=N Write=N Edit=N Bash=N build-runner=N test-runner=N
 ---END_TOKEN_REPORT---
 ```
 
-- `FILES_READ`: every file you read from disk (via Read tool), with approximate character count
-- `TOOL_CALLS`: count of each tool type used during this task
-- `SELF_ASSESSED_INPUT`: approximate total characters of all input you received (prompt + file reads)
-- `SELF_ASSESSED_OUTPUT`: approximate total characters of all output you produced (code + messages)
+- `FILES_READ`: semicolon-separated list of files read from disk via the Read tool, each
+  with an approximate char count. Use `(none)` if no files were read.
+- `TOOL_CALLS`: space-separated `name=count` pairs for tools you invoked. Omit tools you
+  did not use; do not pad zeros for unused tools.

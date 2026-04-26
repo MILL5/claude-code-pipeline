@@ -137,7 +137,16 @@ def parse_reviewer_result(output: str) -> dict:
 
 
 def parse_token_report(output: str) -> dict | None:
-    """Extract TOKEN_REPORT block from any agent output."""
+    """Extract TOKEN_REPORT block from any agent output.
+
+    Compact single-line-per-field format:
+        ---TOKEN_REPORT---
+        FILES_READ: <path1> ~Nchars; <path2> ~Nchars
+        TOOL_CALLS: Read=N Write=N Edit=N build-runner=N
+        ---END_TOKEN_REPORT---
+
+    `FILES_READ` may be `(none)` when no files were read; `TOOL_CALLS` is required.
+    """
     start_marker = "---TOKEN_REPORT---"
     end_marker = "---END_TOKEN_REPORT---"
 
@@ -152,25 +161,22 @@ def parse_token_report(output: str) -> dict | None:
     block = output[start_idx + len(start_marker):end_idx].strip()
     report: dict = {"files_read": [], "tool_calls": {}}
 
-    section = None
     for line in block.split("\n"):
         stripped = line.strip()
-        if stripped == "FILES_READ:":
-            section = "files"
-        elif stripped == "TOOL_CALLS:":
-            section = "tools"
-        elif stripped.startswith("SELF_ASSESSED_INPUT:"):
-            report["self_assessed_input"] = stripped.split(":", 1)[1].strip()
-            section = None
-        elif stripped.startswith("SELF_ASSESSED_OUTPUT:"):
-            report["self_assessed_output"] = stripped.split(":", 1)[1].strip()
-            section = None
-        elif section == "files" and stripped.startswith("- "):
-            report["files_read"].append(stripped[2:])
-        elif section == "tools" and stripped.startswith("- "):
-            parts = stripped[2:].split(":", 1)
-            if len(parts) == 2:
-                report["tool_calls"][parts[0].strip()] = parts[1].strip()
+        if stripped.startswith("FILES_READ:"):
+            payload = stripped.split(":", 1)[1].strip()
+            if payload and payload.lower() != "(none)":
+                report["files_read"] = [
+                    entry.strip()
+                    for entry in payload.split(";")
+                    if entry.strip()
+                ]
+        elif stripped.startswith("TOOL_CALLS:"):
+            payload = stripped.split(":", 1)[1].strip()
+            for token in payload.split():
+                if "=" in token:
+                    name, count = token.split("=", 1)
+                    report["tool_calls"][name.strip()] = count.strip()
 
     return report
 
@@ -233,6 +239,78 @@ def parse_open_pr_result(output: str) -> dict:
             result["number"] = line.split(":", 1)[1].strip()
         elif line.startswith("PR_URL:"):
             result["url"] = line.split(":", 1)[1].strip()
+    return result
+
+
+def parse_plan_stub(output: str) -> dict | None:
+    """Parse the architect-planner's PLAN_WRITTEN stub.
+
+    Expected format (emitted by 1b agent on final plan output):
+        PLAN_WRITTEN: .claude/tmp/1b-plan.md
+
+        Summary:
+        - Feature: <name>
+        - Plan type: feat
+        - Waves: 3 (sizes: 4, 3, 2)
+        - Total tasks: 9
+        - Models: 7 Haiku, 2 Sonnet, 0 Opus
+        - Stacks: react, python
+        - Estimated cost: $0.18
+        - Implementation clarification: none
+
+        Deferred items: 0
+    """
+    if "PLAN_WRITTEN:" not in output:
+        return None
+
+    result: dict = {"path": "", "deferred_items": 0}
+    for line in output.strip().split("\n"):
+        stripped = line.strip()
+        if stripped.startswith("PLAN_WRITTEN:"):
+            result["path"] = stripped.split(":", 1)[1].strip()
+        elif stripped.startswith("- Feature:"):
+            result["feature"] = stripped.split(":", 1)[1].strip()
+        elif stripped.startswith("- Plan type:"):
+            result["plan_type"] = stripped.split(":", 1)[1].strip()
+        elif stripped.startswith("- Total tasks:"):
+            try:
+                result["total_tasks"] = int(stripped.split(":", 1)[1].strip())
+            except ValueError:
+                pass
+        elif stripped.startswith("- Waves:"):
+            payload = stripped.split(":", 1)[1].strip()
+            # "3 (sizes: 4, 3, 2)" -> waves=3, wave_sizes=[4,3,2]
+            count_match = re.match(r"(\d+)", payload)
+            if count_match:
+                result["waves"] = int(count_match.group(1))
+            sizes_match = re.search(r"sizes:\s*([\d,\s]+)", payload)
+            if sizes_match:
+                result["wave_sizes"] = [
+                    int(s.strip()) for s in sizes_match.group(1).split(",")
+                    if s.strip().isdigit()
+                ]
+        elif stripped.startswith("- Models:"):
+            payload = stripped.split(":", 1)[1].strip()
+            counts = {}
+            for match in re.finditer(r"(\d+)\s+(Haiku|Sonnet|Opus)", payload):
+                counts[match.group(2).lower()] = int(match.group(1))
+            result["models"] = counts
+        elif stripped.startswith("- Stacks:"):
+            payload = stripped.split(":", 1)[1].strip()
+            result["stacks"] = [s.strip() for s in payload.split(",") if s.strip()]
+        elif stripped.startswith("- Estimated cost:"):
+            payload = stripped.split(":", 1)[1].strip().lstrip("$")
+            try:
+                result["estimated_cost"] = float(payload)
+            except ValueError:
+                pass
+        elif stripped.startswith("Deferred items:"):
+            payload = stripped.split(":", 1)[1].strip()
+            try:
+                result["deferred_items"] = int(payload)
+            except ValueError:
+                pass
+
     return result
 
 

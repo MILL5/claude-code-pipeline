@@ -1,6 +1,5 @@
 # Android / Kotlin — Essential Rules (Haiku)
 
-- Never run `git commit`/`git push` — orchestrator commits after review
 - MVVM: UI displays ViewModel state via StateFlow, Repositories own data logic
 - Backing property: private MutableStateFlow, public StateFlow — never expose mutable
 - Sealed classes for UI state (Loading/Success/Error) — exhaustive `when`

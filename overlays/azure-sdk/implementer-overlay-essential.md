@@ -1,7 +1,5 @@
 # Azure SDK Essential Rules
 
-Critical rules for Haiku execution. Violations will fail code review.
-
 - Always use `DefaultAzureCredential` — never hardcode keys or connection strings
 - Reuse SDK clients (singleton/scoped) — never create per-request
 - Configure retry policies with exponential backoff on all clients

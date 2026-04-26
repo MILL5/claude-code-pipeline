@@ -1,8 +1,5 @@
 # Swift/iOS Essential Rules
 
-Critical rules for Haiku execution. Violations will fail code review.
-
-- Never run `git commit`/`git push` — orchestrator commits after review
 - Use Swift's type system: enums for states, Result for errors, optionals only when truly optional
 - Handle error cases the brief specifies, using the exact error types provided
 - `@MainActor` for UI-related code (ViewModels, UI state management)

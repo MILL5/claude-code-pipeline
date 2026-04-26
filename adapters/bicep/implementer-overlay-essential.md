@@ -1,8 +1,5 @@
 # Bicep Essential Rules
 
-Critical rules for Haiku execution. Violations will fail code review.
-
-- Never run `git commit`/`git push` — orchestrator commits after review
 - camelCase for parameters/variables/outputs, PascalCase for resource symbolic names
 - `@description()` decorator on every parameter — no exceptions
 - `@secure()` on all secrets, passwords, connection strings, and keys

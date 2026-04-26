@@ -16,14 +16,6 @@ Consider extracting validation helpers to reduce duplication across arithmetic f
 The error messages could include the actual values that caused the failure for debugging
 
 ---TOKEN_REPORT---
-FILES_READ:
-- src/calculator.py (~520 chars)
-- tests/test_calculator.py (~1100 chars)
-- src/types.py (~200 chars)
-TOOL_CALLS:
-- Read: 5
-- Grep: 3
-- Glob: 1
-SELF_ASSESSED_INPUT: ~7200 chars
-SELF_ASSESSED_OUTPUT: ~900 chars
+FILES_READ: src/calculator.py ~520; tests/test_calculator.py ~1100; src/types.py ~200
+TOOL_CALLS: Read=5 Grep=3 Glob=1
 ---END_TOKEN_REPORT---

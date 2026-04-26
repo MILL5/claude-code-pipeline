@@ -107,8 +107,8 @@ Flag any of these anomalies:
 
 ### 7. Hidden Token Sources
 
-Examine the `files_read` and `agent_input_self` fields from agent TOKEN_REPORTs to assess
-consumption invisible to the orchestrator's prompt-level tracking:
+Examine the `files_read` field from agent TOKEN_REPORTs to assess file-read consumption
+invisible to the orchestrator's prompt-level tracking:
 
 - **Agent definition reads**: If multiple agents of the same type each read their definition
   from disk (e.g., `implementer-agent.md` read 9 times), compute the cumulative cost. This is
@@ -118,13 +118,90 @@ consumption invisible to the orchestrator's prompt-level tracking:
   inline the relevant types into each brief instead.
 - **Large file ingestion**: Any single file read > 5,000 chars by a Haiku agent is suspect —
   Haiku tasks should be self-contained from their brief, not reading large files.
-- **Self-assessed vs orchestrator-tracked delta**: Compare each agent's `agent_input_self` to the
-  orchestrator's `input_chars`. The difference represents hidden consumption (file reads, tool
-  outputs, agent definition ingestion). Compute the total delta across all agents — this is the
-  "blind spot" the orchestrator's prompt-level tracking misses.
+- **Aggregate file-read overhead**: Sum the chars across all `files_read` entries in the
+  ledger. If this exceeds 30% of total orchestrator-tracked input chars, flag as a finding —
+  agents are spending heavily on disk I/O that the planner could potentially inline.
 
-If total hidden consumption exceeds 30% of orchestrator-tracked consumption, flag this as a
-significant finding.
+Note: Earlier versions of this skill compared `agent_input_self` to orchestrator-tracked
+`input_chars` to compute a "hidden consumption delta." Self-assessed agent input was
+unreliable (agents cannot accurately count their prompt size) and that calculation was
+removed. The aggregate file-read overhead above replaces it as the actionable signal.
+
+### 8a. Orchestrator Fixed Overhead
+
+The `TOKEN_LEDGER` records cost per agent invocation, but the orchestrator itself consumes
+tokens that are invisible to per-agent tracking:
+
+- The orchestrate skill file (loaded as part of the orchestrator's working context)
+- ORCHESTRATOR.md extracts pasted into each architect-agent prompt
+- Adapter overlay files loaded for each implementer/reviewer launch
+- Cross-cutting overlay files (when applicable)
+- Local overlay files (`.claude/local/*.md`)
+
+Estimate fixed overhead from known file sizes (these are cheap stat-only operations):
+
+```
+fixed_overhead_chars = 0
+fixed_overhead_chars += filesize(<pipeline_root>/skills/orchestrate/SKILL.md)
+fixed_overhead_chars += sum(filesize(<pipeline_root>/agents/<role>-agent.md) for role in [architect, implementer, code-reviewer])
+fixed_overhead_chars += filesize(.claude/ORCHESTRATOR.md)  # full file as conservative upper bound
+for stack in stacks:
+    for overlay_type in [architect, implementer, implementer_essential, reviewer, test]:
+        fixed_overhead_chars += filesize(<pipeline_root>/adapters/<stack>/<overlay_type>-overlay.md)
+for overlay in overlays:
+    fixed_overhead_chars += sum(filesizes of overlay files)
+for local in [project-overlay, coding-standards, architecture-rules, review-criteria]:
+    if exists(.claude/local/<local>.md):
+        fixed_overhead_chars += filesize
+```
+
+Convert to tokens: `fixed_overhead_tokens = fixed_overhead_chars / 4`.
+
+Report this as a top-level line in the issue body:
+```
+Fixed orchestrator overhead: ~N,NNN tokens (~$X.XX at Sonnet input rates)
+This is loaded ~once per /orchestrate run, separate from per-agent costs.
+```
+
+If `fixed_overhead_tokens > 25,000`, flag as a finding — the orchestrate skill or overlays
+have grown enough that pipeline startup cost is becoming significant. Recommend trimming the
+orchestrate skill (it should target <15K tokens) or splitting overlay content.
+
+### 8. Output Bloat Detection (per-agent-type baselines)
+
+Compare each agent's `output_tokens` to the expected baseline for its protocol output. The
+output protocols are tightly contracted — outputs that significantly exceed the baseline
+indicate the agent is over-explaining, ignoring the "Do NOT deliver" guardrails, or
+emitting Standalone-Mode content when it should emit Pipeline-Mode (PASS/FAIL).
+
+| Agent / output type | Baseline output tokens | Soft cap (flag at) | Hard cap (anomaly) |
+|---|---|---|---|
+| implementer SUCCESS (Haiku) | ~300 | 600 | 1,500 |
+| implementer SUCCESS (Sonnet) | ~400 | 800 | 2,000 |
+| implementer FAILURE | ~250 | 500 | 1,200 |
+| reviewer PASS | ~200 | 400 | 1,000 |
+| reviewer FAIL | ~500 | 1,200 | 3,000 |
+| architect 1a (per round) | ~600 | 800 | 1,500 |
+| architect 1b stub (PLAN_WRITTEN) | ~250 | 500 | 1,000 |
+| architect blast-radius (3.5) | ~400 | 800 | 1,500 |
+
+**Soft cap exceeded:** flag as a minor finding; suggests the agent is verbose. Cumulative
+cost matters more than individual outliers — sum the soft-cap violations across the run.
+If 3+ outputs exceed soft cap, recommend tightening the agent's "do not deliver" rules.
+
+**Hard cap exceeded:** flag as a Section 6 anomaly. Likely causes:
+- Implementer added preamble/commentary before SUCCESS/FAILURE header
+- Reviewer fell back to legacy verbose format (B3 should have removed this — check for
+  CRITICAL ISSUES / SOLID VIOLATIONS / RECOMMENDED REFACTORINGS section headers)
+- Architect emitted full plan in 1b instead of PLAN_WRITTEN stub (B1 regression)
+- Optional improvements section exceeded the 5-entry cap (B2 regression)
+
+To classify by type, parse the agent's first output line:
+- `SUCCESS` / `FAILURE` → implementer
+- `PASS` / `FAIL` → reviewer
+- `PLAN_WRITTEN:` → architect 1b
+- `CLARIFICATION COMPLETE` → architect 1a final
+- Other → architect (analysis or blast-radius) — use the step prefix in the ledger entry
 
 ## Significance Threshold
 
@@ -134,7 +211,9 @@ Only file a GitHub issue if **at least ONE** of these conditions is met:
 - Any anomaly from Section 6 is detected
 - 3 or more prompt efficiency flags from Section 3
 - Review cost ratio > 0.5 from Section 5
-- Hidden consumption exceeds 30% of orchestrator-tracked consumption (Section 7)
+- Aggregate file-read overhead exceeds 30% of orchestrator-tracked input (Section 7)
+- 3+ outputs exceed the soft cap, OR any output exceeds the hard cap (Section 8)
+- Fixed orchestrator overhead exceeds 25,000 tokens (Section 8a)
 
 If none of these thresholds are met, output `FINDINGS: NONE` and stop.
 
@@ -190,6 +269,9 @@ Use this structure for the issue body:
 **Total pipeline cost:** $X.XX (estimated)
 **Total tokens:** X input / X output
 **Agent calls:** X total
+**Fixed orchestrator overhead:** ~N,NNN tokens (~$X.XX) — orchestrate skill, agent
+definitions, adapter overlays, ORCHESTRATOR.md (loaded once per run, separate from
+per-agent costs above)
 
 ## Cost Breakdown by Step
 

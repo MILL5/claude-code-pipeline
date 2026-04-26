@@ -116,6 +116,11 @@ For each question, present:
 
 **Format:** Group questions by theme (architecture, patterns, data, integration) for clarity.
 
+**Output cap: each clarification round (analysis preamble + questions combined) must stay
+under ~800 tokens (~3,200 chars).** Excess questions get cut — keep only the ones whose
+answer changes plan structure (task count, model assignment, wave ordering, file set, risk
+profile). If you find yourself padding to fill space, you have your answer; just decide.
+
 **Guardrails:**
 - Maximum TWO rounds of questions. Batch related questions into a single pause per round.
   Round 1: questions from initial analysis. Round 2 (if needed): follow-up questions that
@@ -430,10 +435,33 @@ Apply these limits to keep planning costs proportional to implementation costs:
 These limits apply to the plan output text only — inline code snippets in context briefs
 (type definitions, signatures) do not count against the token budget.
 
-## Plan Persistence
+## Plan Persistence and Output Protocol
 
-After completing the plan, write it to `.claude/tmp/1b-plan.md` as a recovery artifact.
-If the session is interrupted after planning but before implementation, the orchestrator
-can resume from this file instead of re-running Opus.
+After completing the plan, **write the full plan to `.claude/tmp/1b-plan.md`** — this file
+is the single source of truth for the orchestrator's downstream steps. The orchestrator
+reads the plan from disk; do NOT re-emit the full plan in your agent output.
 
-Output the plan as text to the orchestrator as well (the file is for recovery only).
+**Output to orchestrator:** Emit ONLY the compact `PLAN_WRITTEN` stub below. The orchestrator
+will read the full plan from `.claude/tmp/1b-plan.md` for wave execution and brief extraction.
+This keeps the output cost proportional to the *decisions made*, not the *bytes shipped*.
+
+```
+PLAN_WRITTEN: .claude/tmp/1b-plan.md
+
+Summary:
+- Feature: <feature name from the plan title>
+- Plan type: feat | fix | refactor | chore | perf
+- Waves: <N> (sizes: <e.g. 4, 3, 2>)
+- Total tasks: <N>
+- Models: <N> Haiku, <N> Sonnet, <N> Opus
+- Stacks: <comma-separated list of stacks present>
+- Estimated cost: $<X.XX>
+- Implementation clarification: <none | resolved in N round(s) | proceeded with best judgment>
+
+Deferred items: <count> (see plan's Deferred Items section if > 0)
+```
+
+If the user requests revisions before the plan is finalized, you may continue to discuss the
+plan in normal text — the `PLAN_WRITTEN` stub is required only on the *final* output that
+signals the plan is ready for execution. Re-write `.claude/tmp/1b-plan.md` after each revision
+so the file always reflects the latest version.

@@ -94,25 +94,16 @@ Use the full planning process for: new features, multi-file changes, refactors t
 
 ## Token Report
 
-After your output (analysis, plan, or blast-radius assessment), append a `TOKEN_REPORT` block.
-This is used by the orchestrator for token usage analysis. Best effort — omit values you cannot
-determine.
+After your output (analysis, plan, or blast-radius assessment), append a compact
+`TOKEN_REPORT` block on three lines.
 
 ```
 ---TOKEN_REPORT---
-FILES_READ:
-- <path> (~<chars> chars)
-TOOL_CALLS:
-- Read: <count>
-- Grep: <count>
-- Glob: <count>
-- EnterPlanMode: <count>
-SELF_ASSESSED_INPUT: ~<chars> chars
-SELF_ASSESSED_OUTPUT: ~<chars> chars
+FILES_READ: <path1> ~<chars>; <path2> ~<chars>
+TOOL_CALLS: Read=N Grep=N Glob=N EnterPlanMode=N
 ---END_TOKEN_REPORT---
 ```
 
-- `FILES_READ`: every file you read from disk, with approximate character count
-- `TOOL_CALLS`: count of each tool type used
-- `SELF_ASSESSED_INPUT`: approximate total characters of all input (prompt + file reads)
-- `SELF_ASSESSED_OUTPUT`: approximate total characters of all output (analysis, plan, etc.)
+- `FILES_READ`: semicolon-separated list of files read from disk, each with an approximate
+  char count. Use `(none)` if no files were read.
+- `TOOL_CALLS`: space-separated `name=count` pairs for tools you invoked. Omit unused tools.

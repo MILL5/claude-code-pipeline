@@ -31,6 +31,7 @@ from parsers import (
     parse_drift_check_output,
     parse_implementer_result,
     parse_open_pr_result,
+    parse_plan_stub,
     parse_reviewer_result,
     parse_security_scan_output,
     parse_test_output,
@@ -66,8 +67,11 @@ class TestImplementerProtocol(unittest.TestCase):
         self.assertIsNotNone(report)
         self.assertIn("files_read", report)
         self.assertIn("tool_calls", report)
-        self.assertIn("self_assessed_input", report)
-        self.assertIn("self_assessed_output", report)
+        self.assertGreater(len(report["files_read"]), 0)
+        self.assertGreater(len(report["tool_calls"]), 0)
+        # Self-assessed fields removed in compact format — orchestrator computes these.
+        self.assertNotIn("self_assessed_input", report)
+        self.assertNotIn("self_assessed_output", report)
 
     def test_failure_has_token_report(self) -> None:
         fixture = (FIXTURES_DIR / "implementer-failure.txt").read_text()
@@ -197,19 +201,58 @@ class TestTokenReport(unittest.TestCase):
         self.assertIsNotNone(report)
         self.assertTrue(len(report["files_read"]) > 0)
         self.assertTrue(len(report["tool_calls"]) > 0)
-        self.assertIn("self_assessed_input", report)
-        self.assertIn("self_assessed_output", report)
+        # Compact format drops self-assessed input/output.
+        self.assertNotIn("self_assessed_input", report)
+        self.assertNotIn("self_assessed_output", report)
 
     def test_missing_report_returns_none(self) -> None:
         output = "SUCCESS\n\nfeat(core): add thing"
         report = parse_token_report(output)
         self.assertIsNone(report)
 
-    def test_malformed_report_returns_partial(self) -> None:
-        output = "PASS\n---TOKEN_REPORT---\nFILES_READ:\n- src/app.py (~1200 chars)\n---END_TOKEN_REPORT---"
+    def test_compact_format_parses(self) -> None:
+        """Compact format: single-line FILES_READ and TOOL_CALLS."""
+        output = (
+            "PASS\n"
+            "---TOKEN_REPORT---\n"
+            "FILES_READ: src/app.py ~1200; src/util.py ~400\n"
+            "TOOL_CALLS: Read=3 Grep=1\n"
+            "---END_TOKEN_REPORT---"
+        )
         report = parse_token_report(output)
         self.assertIsNotNone(report)
-        self.assertEqual(len(report["files_read"]), 1)
+        self.assertEqual(len(report["files_read"]), 2)
+        self.assertEqual(report["tool_calls"]["Read"], "3")
+        self.assertEqual(report["tool_calls"]["Grep"], "1")
+
+    def test_files_read_none_handled(self) -> None:
+        """FILES_READ may be (none) when no files were read."""
+        output = (
+            "SUCCESS\n\nfix(core): tweak\n"
+            "---TOKEN_REPORT---\n"
+            "FILES_READ: (none)\n"
+            "TOOL_CALLS: Edit=1\n"
+            "---END_TOKEN_REPORT---"
+        )
+        report = parse_token_report(output)
+        self.assertIsNotNone(report)
+        self.assertEqual(report["files_read"], [])
+        self.assertEqual(report["tool_calls"]["Edit"], "1")
+
+    def test_no_self_assessed_fields_in_output(self) -> None:
+        """Regression: SELF_ASSESSED_* fields should not appear in compact output."""
+        for fixture_name in [
+            "implementer-success.txt",
+            "implementer-failure.txt",
+            "reviewer-pass.txt",
+            "reviewer-fail.txt",
+            "token-report.txt",
+        ]:
+            content = (FIXTURES_DIR / fixture_name).read_text()
+            self.assertNotIn("SELF_ASSESSED_INPUT", content,
+                             f"{fixture_name} still has SELF_ASSESSED_INPUT")
+            self.assertNotIn("SELF_ASSESSED_OUTPUT", content,
+                             f"{fixture_name} still has SELF_ASSESSED_OUTPUT")
 
 
 class TestTokenAnalysisResult(unittest.TestCase):
@@ -231,6 +274,37 @@ class TestOpenPRResult(unittest.TestCase):
         self.assertEqual(result["branch"], "feat/add-feature")
         self.assertEqual(result["number"], "42")
         self.assertIn("github.com", result["url"])
+
+
+class TestPlanStub(unittest.TestCase):
+    def test_plan_stub_full_parse(self) -> None:
+        fixture = (FIXTURES_DIR / "plan-stub.txt").read_text()
+        result = parse_plan_stub(fixture)
+        self.assertIsNotNone(result)
+        self.assertEqual(result["path"], ".claude/tmp/1b-plan.md")
+        self.assertEqual(result["feature"], "Add JWT refresh token rotation")
+        self.assertEqual(result["plan_type"], "feat")
+        self.assertEqual(result["waves"], 3)
+        self.assertEqual(result["wave_sizes"], [4, 3, 2])
+        self.assertEqual(result["total_tasks"], 9)
+        self.assertEqual(result["models"]["haiku"], 7)
+        self.assertEqual(result["models"]["sonnet"], 2)
+        self.assertEqual(result["models"]["opus"], 0)
+        self.assertEqual(result["stacks"], ["python", "react"])
+        self.assertAlmostEqual(result["estimated_cost"], 0.18)
+        self.assertEqual(result["deferred_items"], 2)
+
+    def test_plan_stub_missing_returns_none(self) -> None:
+        result = parse_plan_stub("Some random text without the marker")
+        self.assertIsNone(result)
+
+    def test_plan_stub_minimal(self) -> None:
+        """A minimal stub should parse without optional fields."""
+        output = "PLAN_WRITTEN: .claude/tmp/1b-plan.md\n\nSummary:\n- Total tasks: 3"
+        result = parse_plan_stub(output)
+        self.assertIsNotNone(result)
+        self.assertEqual(result["path"], ".claude/tmp/1b-plan.md")
+        self.assertEqual(result["total_tasks"], 3)
 
 
 class TestEdgeCases(unittest.TestCase):

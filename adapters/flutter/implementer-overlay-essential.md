@@ -1,6 +1,5 @@
 # Flutter / Dart — Essential Rules (Haiku)
 
-- Never run `git commit`/`git push` — orchestrator commits after review
 - MVVM layers: View (display), ViewModel (ChangeNotifier), Repository, Service
 - Extract widgets as classes, not helper functions — `const` constructors everywhere
 - `setState` only for ephemeral widget-local state — never high in the tree

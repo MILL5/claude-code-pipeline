@@ -276,17 +276,21 @@ accumulates token usage data for every agent call throughout the pipeline. Also 
 | `notes` | string | Context (e.g., `escalated from haiku`, `review-fix cycle 2`, `clarify round 3`) |
 | `files_read` | list | Files the agent read from disk (from TOKEN_REPORT), with approximate sizes |
 | `tool_calls` | map | Tool call counts from the agent's TOKEN_REPORT |
-| `agent_input_self` | number | Agent's self-assessed total input chars (from TOKEN_REPORT) |
-| `agent_output_self` | number | Agent's self-assessed total output chars (from TOKEN_REPORT) |
 
 **How to record:** After every Agent launch or SendMessage call:
 1. Measure the composed prompt length as `input_chars` and the agent's complete response as
    `output_chars`. Compute approximate tokens as `chars / 4`.
-2. Parse the agent's `---TOKEN_REPORT---` block (if present) to extract `files_read`,
-   `tool_calls`, `agent_input_self`, and `agent_output_self`. These capture consumption
-   invisible to the orchestrator (file reads from disk, tool-generated output).
+2. Parse the agent's `---TOKEN_REPORT---` block (compact format, 3 lines) to extract
+   `files_read` and `tool_calls`. These capture file-read consumption invisible to the
+   orchestrator.
 3. If the TOKEN_REPORT is missing or malformed, leave those fields empty — do not fail.
 4. Append the entry to `TOKEN_LEDGER`.
+
+**Note on self-assessed fields:** Earlier ledger versions tracked `agent_input_self` /
+`agent_output_self` from `SELF_ASSESSED_INPUT/OUTPUT` lines in agent reports. These were
+unreliable (agents cannot accurately count their own prompt size) and have been removed.
+Token-analysis estimates orchestrator overhead from known fixed sizes (skill files,
+overlays, agent definitions) rather than agent self-reports.
 
 ## Step 0.65: Initialize Backlog Integration State
 
@@ -435,8 +439,7 @@ Prompt: |
 
   <append cross-cutting overlays under "## Cross-Cutting: <name> Context" headers>
 
-  <append local overlays: LOCAL_OVERLAYS.all under "## Project: Local Standards",
-   LOCAL_OVERLAYS.architect under "## Project: Architecture Rules" — skip if empty>
+  <append local overlays for the architect role per the Step 0.2 matrix; skip empty files>
 
   STACK MAPPING (for awareness during analysis):
   <for each stack, list its stack_paths patterns, e.g.:
@@ -505,8 +508,7 @@ Prompt: |
 
   <append cross-cutting overlays under "## Cross-Cutting: <name> Context" headers>
 
-  <append local overlays: LOCAL_OVERLAYS.all under "## Project: Local Standards",
-   LOCAL_OVERLAYS.architect under "## Project: Architecture Rules" — skip if empty>
+  <append local overlays for the architect role per the Step 0.2 matrix; skip empty files>
 
   STACK MAPPING (for task assignment — assign each task a stack based on its files):
   <for each stack, list its stack_paths patterns, e.g.:
@@ -536,7 +538,12 @@ modeling). See Step 2.5 in the planner skill.
 - After receiving answers (or if the agent has no questions), it proceeds to decomposition
   and plan generation.
 
-**Wait for the plan.** Review it for:
+**Wait for the `PLAN_WRITTEN` stub.** The architect emits a compact stub (feature, plan type,
+wave sizes, task count, model distribution, estimated cost) instead of the full plan. The
+full plan is written to `.claude/tmp/1b-plan.md` — read that file from disk to access waves,
+context briefs, and task metadata for the rest of the pipeline.
+
+After receiving the `PLAN_WRITTEN` stub, read `.claude/tmp/1b-plan.md` and review:
 - Does it respect the file-per-task limits from CLAUDE.md?
 - Are waves and dependencies sensible?
 - Are context briefs self-contained and free of "see task X" cross-references?
@@ -545,7 +552,10 @@ If the plan includes a `## Deferred Items` section, process each entry per the
 **Backlog Integration** section below (fold or defer). Do this before presenting
 the plan to the user so the folded items appear in the wave list.
 
-Present the plan summary to the user and wait for confirmation before proceeding.
+Present the stub-derived plan summary to the user and wait for confirmation before
+proceeding. For all subsequent steps that need brief content (Step 2, Step 2.2, Step 3.5),
+the orchestrator reads `.claude/tmp/1b-plan.md` directly — never ask the architect to re-emit
+the plan.
 
 **Token tracking:** Record a `TOKEN_LEDGER` entry for the initial 1b agent launch (step `1b`). If implementation clarification questions occur, record each SendMessage round as step `1b:impl-clarify-N`. If plan revisions are requested, record each revision round as step `1b:revision-N`. Agent: `architect-agent`, model: as selected above (`sonnet` or `opus`).
 
@@ -607,8 +617,7 @@ Prompt: |
 
   <append cross-cutting overlays (essential or full, matching model)>
 
-  <append local overlays: LOCAL_OVERLAYS.all under "## Project: Local Standards",
-   LOCAL_OVERLAYS.implementer under "## Project: Coding Standards" — skip if empty>
+  <append local overlays for the implementer role per the Step 0.2 matrix; skip empty files>
 
   BUILD COMMAND: python3 .claude/scripts/<task_stack>/build.py
   TEST COMMAND: python3 .claude/scripts/<task_stack>/test.py
@@ -647,7 +656,7 @@ Agent: code-reviewer-agent
 Model: sonnet
 Prompt: |
   You are being launched by the orchestration pipeline.
-  Use your Pipeline Mode output protocol (PASS/FAIL).
+  Use the PASS/FAIL output protocol from your agent definition.
   Append a TOKEN_REPORT block after your output.
 
   You will review multiple tasks in this wave. Each review is independent — when
@@ -661,9 +670,7 @@ Prompt: |
 
   <append cross-cutting overlays under "## Cross-Cutting: <name> Review Rules" headers>
 
-  <append local overlays: LOCAL_OVERLAYS.all under "## Project: Local Standards",
-   LOCAL_OVERLAYS.implementer under "## Project: Coding Standards",
-   LOCAL_OVERLAYS.reviewer under "## Project: Review Criteria" — skip if empty>
+  <append local overlays for the reviewer role per the Step 0.2 matrix; skip empty files>
 
   REVIEW THESE CHANGES:
 
@@ -715,8 +722,7 @@ Prompt: |
 
   <append cross-cutting overlays>
 
-  <append local overlays: LOCAL_OVERLAYS.all under "## Project: Local Standards",
-   LOCAL_OVERLAYS.implementer under "## Project: Coding Standards" — skip if empty>
+  <append local overlays for the implementer role per the Step 0.2 matrix; skip empty files>
 
   BUILD COMMAND: python3 .claude/scripts/<task_stack>/build.py
   TEST COMMAND: python3 .claude/scripts/<task_stack>/test.py
@@ -811,8 +817,7 @@ Prompt: |
 
   <append cross-cutting overlays>
 
-  <append local overlays: LOCAL_OVERLAYS.all under "## Project: Local Standards",
-   LOCAL_OVERLAYS.architect under "## Project: Architecture Rules" — skip if empty>
+  <append local overlays for the architect role per the Step 0.2 matrix; skip empty files>
 
   A bug was found during manual testing of a feature implementation. Assess the
   blast radius of fixing this bug and recommend a fix approach.
@@ -829,13 +834,15 @@ Prompt: |
   CODEBASE CONTEXT (ORCHESTRATOR.md 3.5 extract — do not re-read from disk):
   <paste 3.5 Extract from Step 0.7>
 
-  Respond with:
-  1. ROOT CAUSE: Which file(s) and task(s) likely caused this
-  2. BLAST RADIUS: What other files/behaviors could be affected by a fix
-  3. FRAGILE AREAS: Any Known Fragile Areas in the blast radius
-  4. FIX APPROACH: Specific fix strategy (1-3 sentences)
-  5. FILES TO MODIFY: Exact list
-  6. REGRESSION RISK: Low/Medium/High with explanation
+  Respond with EXACTLY these 6 fields, each capped to keep the response bounded.
+  Do NOT add prose outside these fields. Total response should fit in ~200 words.
+  1. ROOT CAUSE (1-3 sentences): Which file(s) and task(s) likely caused this
+  2. BLAST RADIUS (1-3 sentences): What other files/behaviors could be affected by a fix
+  3. FRAGILE AREAS (1-3 sentences, or `none` if no overlap): Any Known Fragile Areas
+     in the blast radius
+  4. FIX APPROACH (1-3 sentences): Specific fix strategy
+  5. FILES TO MODIFY (bullet list, paths only — no prose)
+  6. REGRESSION RISK (one line): Low/Medium/High with one-sentence justification
 ```
 
 #### 3.5.2: FIX
@@ -862,8 +869,7 @@ Prompt: |
 
   <append cross-cutting overlays>
 
-  <append local overlays: LOCAL_OVERLAYS.all under "## Project: Local Standards",
-   LOCAL_OVERLAYS.implementer under "## Project: Coding Standards" — skip if empty>
+  <append local overlays for the implementer role per the Step 0.2 matrix; skip empty files>
 
   BUILD COMMAND: python3 .claude/scripts/<resolved_stack>/build.py
   TEST COMMAND: python3 .claude/scripts/<resolved_stack>/test.py
@@ -896,7 +902,7 @@ Agent: code-reviewer-agent
 Model: sonnet
 Prompt: |
   You are being launched by the orchestration pipeline.
-  Use your Pipeline Mode output protocol (PASS/FAIL).
+  Use the PASS/FAIL output protocol from your agent definition.
 
   TECH STACK REVIEW RULES:
   <resolve stack from affected files, then paste
@@ -905,9 +911,7 @@ Prompt: |
 
   <append cross-cutting overlays>
 
-  <append local overlays: LOCAL_OVERLAYS.all under "## Project: Local Standards",
-   LOCAL_OVERLAYS.implementer under "## Project: Coding Standards",
-   LOCAL_OVERLAYS.reviewer under "## Project: Review Criteria" — skip if empty>
+  <append local overlays for the reviewer role per the Step 0.2 matrix; skip empty files>
 
   This is a BUG FIX review. In addition to your standard checks, explicitly verify:
   - The fix does not revert or contradict the original implementation's intent

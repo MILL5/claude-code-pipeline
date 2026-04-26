@@ -1,18 +1,4 @@
 ---TOKEN_REPORT---
-FILES_READ:
-- src/calculator.py (~450 chars)
-- src/utils.py (~300 chars)
-- tests/test_calculator.py (~820 chars)
-- .claude/ORCHESTRATOR.md (~3200 chars)
-TOOL_CALLS:
-- build-runner: 1
-- test-runner: 2
-- Read: 6
-- Write: 2
-- Edit: 3
-- Grep: 1
-- Glob: 0
-- Bash: 1
-SELF_ASSESSED_INPUT: ~12500 chars
-SELF_ASSESSED_OUTPUT: ~2100 chars
+FILES_READ: src/calculator.py ~450; src/utils.py ~300; tests/test_calculator.py ~820; .claude/ORCHESTRATOR.md ~3200
+TOOL_CALLS: build-runner=1 test-runner=2 Read=6 Write=2 Edit=3 Grep=1 Glob=0 Bash=1
 ---END_TOKEN_REPORT---

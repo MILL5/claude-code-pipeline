@@ -56,6 +56,11 @@ deliverable. Group as:
 Present the analysis summary first (seams, files, fragile areas), then the questions.
 Be concise — no filler.
 
+**Output cap: each clarification round (analysis + questions combined) must stay under
+~800 tokens (~3,200 chars).** If you have more questions than fit, choose the highest-leverage
+ones — questions whose answer changes the deliverable, not implementation details. Filler
+restating the user's request, redundant framing, or background essays should be cut.
+
 **Do NOT ask about:**
 - Technical approach or architecture patterns ("should we use X pattern?")
 - Implementation strategy ("new service vs. extending existing?")

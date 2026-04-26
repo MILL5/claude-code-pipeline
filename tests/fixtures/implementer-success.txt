@@ -7,16 +7,6 @@ feat(calculator): add multiply function to calculator module
 - Add comprehensive unit tests achieving 94% coverage
 
 ---TOKEN_REPORT---
-FILES_READ:
-- src/calculator.py (~450 chars)
-- tests/test_calculator.py (~820 chars)
-TOOL_CALLS:
-- build-runner: 1
-- test-runner: 2
-- Read: 3
-- Write: 1
-- Edit: 2
-- Bash: 0
-SELF_ASSESSED_INPUT: ~8500 chars
-SELF_ASSESSED_OUTPUT: ~1200 chars
+FILES_READ: src/calculator.py ~450; tests/test_calculator.py ~820
+TOOL_CALLS: build-runner=1 test-runner=2 Read=3 Write=1 Edit=2 Bash=0
 ---END_TOKEN_REPORT---

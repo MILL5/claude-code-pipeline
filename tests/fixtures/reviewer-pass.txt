@@ -3,13 +3,6 @@ Minor: consider using math.isclose() for float comparisons in test assertions
 Minor: multiply docstring could mention overflow behavior
 
 ---TOKEN_REPORT---
-FILES_READ:
-- src/calculator.py (~520 chars)
-- tests/test_calculator.py (~1100 chars)
-TOOL_CALLS:
-- Read: 4
-- Grep: 2
-- Glob: 1
-SELF_ASSESSED_INPUT: ~6800 chars
-SELF_ASSESSED_OUTPUT: ~350 chars
+FILES_READ: src/calculator.py ~520; tests/test_calculator.py ~1100
+TOOL_CALLS: Read=4 Grep=2 Glob=1
 ---END_TOKEN_REPORT---

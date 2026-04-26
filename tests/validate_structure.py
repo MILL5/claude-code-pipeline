@@ -262,6 +262,38 @@ def check_essential_overlay_size(result: ValidationResult) -> None:
             )
 
 
+def check_essential_overlay_no_pipeline_protocol_rules(result: ValidationResult) -> None:
+    """Essential overlays must not duplicate pipeline-protocol rules from agent definitions (C1).
+
+    The 'Never run git commit/git push' rule lives in implementer-agent.md (always loaded
+    as system prompt). Repeating it in adapter essentials is pure duplication — Haiku tasks
+    that read the agent definition + essential see the same rule twice.
+    """
+    overlay_paths = []
+    for adapter in ADAPTERS:
+        overlay_paths.append(PIPELINE_ROOT / "adapters" / adapter / "implementer-overlay-essential.md")
+    for overlay in OVERLAYS:
+        overlay_paths.append(PIPELINE_ROOT / "overlays" / overlay / "implementer-overlay-essential.md")
+
+    for path in overlay_paths:
+        if not path.exists():
+            continue
+        rel = path.relative_to(PIPELINE_ROOT)
+        content = path.read_text()
+        if "git commit" in content and "orchestrator commits" in content:
+            result.fail(
+                f"{rel}: still contains 'git commit' pipeline-protocol rule "
+                f"(C1 regression — that rule belongs in implementer-agent.md)"
+            )
+        elif "Critical rules for Haiku execution. Violations will fail code review" in content:
+            result.fail(
+                f"{rel}: still contains boilerplate disclaimer "
+                f"(C1 — remove this filler line, the rules speak for themselves)"
+            )
+        else:
+            result.ok(f"{rel}: free of pipeline-protocol duplication")
+
+
 def check_agent_markers(result: ValidationResult) -> None:
     """Agents must have the correct injection markers."""
     for agent_file, markers in AGENT_MARKERS.items():
@@ -293,7 +325,12 @@ def check_agent_protocols(result: ValidationResult) -> None:
 
 
 def check_token_report_consistency(result: ValidationResult) -> None:
-    """All agents that should emit TOKEN_REPORT must document the format."""
+    """All agents that should emit TOKEN_REPORT must document the compact format.
+
+    The compact format drops SELF_ASSESSED_* fields (unreliable self-reports) and
+    consolidates FILES_READ/TOOL_CALLS to single-line entries. Agents must NOT
+    re-introduce the verbose multi-line format.
+    """
     token_report_agents = ["implementer-agent.md", "code-reviewer-agent.md", "architect-agent.md"]
     for agent_file in token_report_agents:
         path = PIPELINE_ROOT / "agents" / agent_file
@@ -304,24 +341,36 @@ def check_token_report_consistency(result: ValidationResult) -> None:
         has_start = "---TOKEN_REPORT---" in content
         has_end = "---END_TOKEN_REPORT---" in content
         has_files_read = "FILES_READ:" in content
-        has_self_input = "SELF_ASSESSED_INPUT:" in content
-        has_self_output = "SELF_ASSESSED_OUTPUT:" in content
+        has_tool_calls = "TOOL_CALLS:" in content
+        # Compact format: SELF_ASSESSED_* must be absent
+        has_self_input = "SELF_ASSESSED_INPUT" in content
+        has_self_output = "SELF_ASSESSED_OUTPUT" in content
 
-        if all([has_start, has_end, has_files_read, has_self_input, has_self_output]):
-            result.ok(f"Agent {agent_file}: TOKEN_REPORT format complete")
+        missing = []
+        if not has_start:
+            missing.append("---TOKEN_REPORT---")
+        if not has_end:
+            missing.append("---END_TOKEN_REPORT---")
+        if not has_files_read:
+            missing.append("FILES_READ:")
+        if not has_tool_calls:
+            missing.append("TOOL_CALLS:")
+
+        bloat = []
+        if has_self_input:
+            bloat.append("SELF_ASSESSED_INPUT (compact format dropped this)")
+        if has_self_output:
+            bloat.append("SELF_ASSESSED_OUTPUT (compact format dropped this)")
+
+        if not missing and not bloat:
+            result.ok(f"Agent {agent_file}: TOKEN_REPORT compact format complete")
         else:
-            missing = []
-            if not has_start:
-                missing.append("---TOKEN_REPORT---")
-            if not has_end:
-                missing.append("---END_TOKEN_REPORT---")
-            if not has_files_read:
-                missing.append("FILES_READ:")
-            if not has_self_input:
-                missing.append("SELF_ASSESSED_INPUT:")
-            if not has_self_output:
-                missing.append("SELF_ASSESSED_OUTPUT:")
-            result.fail(f"Agent {agent_file}: TOKEN_REPORT missing: {', '.join(missing)}")
+            details = []
+            if missing:
+                details.append(f"missing: {', '.join(missing)}")
+            if bloat:
+                details.append(f"bloat: {', '.join(bloat)}")
+            result.fail(f"Agent {agent_file}: TOKEN_REPORT — {' | '.join(details)}")
 
 
 def check_implementer_contract_references(result: ValidationResult) -> None:
@@ -392,6 +441,158 @@ def check_extract_profile_headers(result: ValidationResult) -> None:
                 result.fail(f"Extract {profile_name}: header '## {header}' not found in template")
 
 
+def check_token_analysis_output_baselines(result: ValidationResult) -> None:
+    """Token-analysis skill must document per-agent-type output baselines (E1)."""
+    path = PIPELINE_ROOT / "skills" / "token-analysis" / "SKILL.md"
+    if not path.exists():
+        return
+
+    content = path.read_text()
+    required_markers = [
+        "Output Bloat Detection",
+        "Soft cap exceeded",
+        "Hard cap exceeded",
+        "PLAN_WRITTEN",
+        "implementer SUCCESS",
+        "reviewer PASS",
+    ]
+    missing = [m for m in required_markers if m not in content]
+    if missing:
+        result.fail(f"token-analysis missing E1 baselines: {', '.join(missing)}")
+    else:
+        result.ok("token-analysis documents per-agent output baselines (E1)")
+
+
+def check_token_analysis_fixed_overhead(result: ValidationResult) -> None:
+    """Token-analysis skill must document fixed orchestrator overhead estimation (E2)."""
+    path = PIPELINE_ROOT / "skills" / "token-analysis" / "SKILL.md"
+    if not path.exists():
+        return
+
+    content = path.read_text()
+    required_markers = [
+        "Orchestrator Fixed Overhead",
+        "fixed_overhead_chars",
+        "Fixed orchestrator overhead",
+        "25,000 tokens",
+    ]
+    missing = [m for m in required_markers if m not in content]
+    if missing:
+        result.fail(f"token-analysis missing E2 fixed-overhead docs: {', '.join(missing)}")
+    else:
+        result.ok("token-analysis documents fixed orchestrator overhead (E2)")
+
+
+def check_clarification_round_caps(result: ValidationResult) -> None:
+    """Architect skills must cap clarification round output to bound input bloat (B5)."""
+    for skill_path in [
+        PIPELINE_ROOT / "skills" / "architect-analyzer" / "SKILL.md",
+        PIPELINE_ROOT / "skills" / "architect-planner" / "SKILL.md",
+    ]:
+        if not skill_path.exists():
+            continue
+        content = skill_path.read_text()
+        rel_path = skill_path.relative_to(PIPELINE_ROOT)
+        if "800 tokens" in content or "800 token" in content:
+            result.ok(f"{rel_path}: documents 800-token clarification cap")
+        else:
+            result.fail(f"{rel_path}: missing clarification round output cap (B5)")
+
+
+def check_reviewer_no_standalone_mode(result: ValidationResult) -> None:
+    """Code-reviewer must not document a separate Standalone Mode (B3).
+
+    The reviewer historically had a verbose 7-section format for non-orchestrator
+    invocations. That format invited output bloat when prompts didn't crisply
+    signal Pipeline Mode. The PASS/FAIL protocol is now the only supported format.
+    """
+    path = PIPELINE_ROOT / "agents" / "code-reviewer-agent.md"
+    if not path.exists():
+        return
+
+    content = path.read_text()
+    forbidden_markers = [
+        "## CRITICAL ISSUES",
+        "## SOLID / MAINTAINABILITY VIOLATIONS",
+        "## PERFORMANCE KILLERS",
+        "## RECOMMENDED REFACTORINGS",
+        "Standalone Mode (launched directly by user)",
+    ]
+    found = [m for m in forbidden_markers if m in content]
+    if found:
+        result.fail(
+            f"Code-reviewer still documents Standalone Mode (B3 regression): {', '.join(found)}"
+        )
+    else:
+        result.ok("Code-reviewer does not document Standalone Mode")
+
+    # Must still document the protocol guard
+    if "Protocol Guard" in content or "If your first line is not" in content:
+        result.ok("Code-reviewer documents protocol guard")
+    else:
+        result.fail("Code-reviewer missing protocol guard (PASS/FAIL header enforcement)")
+
+
+def check_reviewer_optional_cap(result: ValidationResult) -> None:
+    """Code-reviewer must document a cap on OPTIONAL IMPROVEMENTS to bound output."""
+    path = PIPELINE_ROOT / "agents" / "code-reviewer-agent.md"
+    if not path.exists():
+        return
+
+    content = path.read_text()
+    if "maximum 5 entries" in content.lower() or "max 5 entries" in content.lower() or "Cap: maximum 5" in content:
+        result.ok("Code-reviewer documents OPTIONAL IMPROVEMENTS cap")
+    else:
+        result.fail("Code-reviewer missing OPTIONAL IMPROVEMENTS cap (B2)")
+
+    if "(N more not shown)" in content or "more not shown" in content:
+        result.ok("Code-reviewer documents overflow indicator")
+    else:
+        result.fail("Code-reviewer missing overflow indicator for capped entries (B2)")
+
+
+def check_planner_plan_stub(result: ValidationResult) -> None:
+    """Planner must emit PLAN_WRITTEN stub instead of the full plan."""
+    planner_path = PIPELINE_ROOT / "skills" / "architect-planner" / "SKILL.md"
+    if not planner_path.exists():
+        result.fail("architect-planner skill exists")
+        return
+
+    content = planner_path.read_text()
+    if "PLAN_WRITTEN:" in content:
+        result.ok("Planner documents PLAN_WRITTEN stub format")
+    else:
+        result.fail("Planner missing PLAN_WRITTEN stub documentation")
+
+    # Regression guard: planner must NOT instruct the agent to re-emit the full plan.
+    if "Output the plan as text to the orchestrator" in content:
+        result.fail(
+            "Planner still instructs agent to re-emit the full plan to orchestrator "
+            "(B1 regression — should write to disk only and emit PLAN_WRITTEN stub)"
+        )
+    else:
+        result.ok("Planner does not instruct double-pay full-plan emission")
+
+
+def check_orchestrate_reads_plan_from_disk(result: ValidationResult) -> None:
+    """Orchestrate must read 1b-plan.md from disk, not from agent output."""
+    orchestrate_path = PIPELINE_ROOT / "skills" / "orchestrate" / "SKILL.md"
+    if not orchestrate_path.exists():
+        return
+
+    content = orchestrate_path.read_text()
+
+    if "PLAN_WRITTEN" in content:
+        result.ok("Orchestrate references PLAN_WRITTEN stub")
+    else:
+        result.fail("Orchestrate missing PLAN_WRITTEN stub reference")
+
+    if "read .claude/tmp/1b-plan.md" in content.lower() or "read `.claude/tmp/1b-plan.md`" in content.lower():
+        result.ok("Orchestrate documents reading 1b-plan.md from disk")
+    else:
+        result.fail("Orchestrate missing 'read 1b-plan.md from disk' instruction")
+
+
 def check_orchestrate_overlay_selection(result: ValidationResult) -> None:
     """Orchestrate must document Haiku vs full overlay selection logic."""
     orchestrate_path = PIPELINE_ROOT / "skills" / "orchestrate" / "SKILL.md"
@@ -422,7 +623,6 @@ def check_orchestrate_token_ledger(result: ValidationResult) -> None:
     required_fields = [
         "step", "agent", "model", "input_chars", "output_chars",
         "is_retry", "is_escalation", "files_read", "tool_calls",
-        "agent_input_self", "agent_output_self",
     ]
 
     for field in required_fields:
@@ -852,10 +1052,18 @@ def run_all_checks(verbose: bool = False) -> ValidationResult:
         ("Required files", check_required_files),
         ("Adapter completeness", check_adapter_completeness),
         ("Essential overlay size", check_essential_overlay_size),
+        ("Essential overlay no pipeline-protocol rules", check_essential_overlay_no_pipeline_protocol_rules),
         ("Agent injection markers", check_agent_markers),
         ("Agent output protocols", check_agent_protocols),
         ("TOKEN_REPORT consistency", check_token_report_consistency),
         ("Implementer contract references", check_implementer_contract_references),
+        ("Reviewer no Standalone Mode", check_reviewer_no_standalone_mode),
+        ("Reviewer OPTIONAL IMPROVEMENTS cap", check_reviewer_optional_cap),
+        ("Clarification round caps", check_clarification_round_caps),
+        ("Token-analysis output baselines", check_token_analysis_output_baselines),
+        ("Token-analysis fixed overhead", check_token_analysis_fixed_overhead),
+        ("Planner PLAN_WRITTEN stub", check_planner_plan_stub),
+        ("Orchestrate reads plan from disk", check_orchestrate_reads_plan_from_disk),
         ("ORCHESTRATOR.md template sections", check_orchestrator_template_sections),
         ("Extract profile headers", check_extract_profile_headers),
         ("Overlay selection logic", check_orchestrate_overlay_selection),

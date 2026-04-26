@@ -15,6 +15,41 @@ import re
 import argparse
 import os
 import json
+import shutil
+
+
+# ---------------------------------------------------------------------------
+# Interpreter selection
+# ---------------------------------------------------------------------------
+
+def _python_cmd(project_dir):
+    """Return the Python interpreter command prefix for this project.
+
+    Resolution order — first match wins:
+      1. ``<project_dir>/.venv/bin/python`` (or ``Scripts/python.exe`` on Windows)
+      2. ``<project_dir>/venv/bin/python``  (or ``Scripts/python.exe`` on Windows)
+      3. ``uv run python`` if ``uv`` is on PATH and ``pyproject.toml`` is present
+      4. system ``python3``
+
+    Why: bare ``python3`` resolves to the system interpreter, which won't see project
+    deps installed in a project-local virtual environment (uv, poetry, plain ``venv``).
+    Pointing at the venv's interpreter directly works for any venv flavor and avoids a
+    hard dependency on uv being present.
+    """
+    venv_python_rel = (
+        os.path.join("Scripts", "python.exe") if os.name == "nt"
+        else os.path.join("bin", "python")
+    )
+    for venv_dir in (".venv", "venv"):
+        candidate = os.path.join(project_dir, venv_dir, venv_python_rel)
+        if os.path.isfile(candidate):
+            return [candidate]
+
+    if (shutil.which("uv") and
+            os.path.isfile(os.path.join(project_dir, "pyproject.toml"))):
+        return ["uv", "run", "python"]
+
+    return ["python3"]
 
 
 # ---------------------------------------------------------------------------
@@ -34,10 +69,11 @@ def detect_test_config(project_dir):
     pyproject_path = os.path.join(project_dir, "pyproject.toml")
     setup_cfg_path = os.path.join(project_dir, "setup.cfg")
 
-    # Check for pytest-cov availability
+    # Check for pytest-cov availability — use the project's interpreter so a venv
+    # installation of pytest-cov is detected even when the system python3 lacks it.
     try:
         result = subprocess.run(
-            ["python3", "-c", "import pytest_cov"],
+            _python_cmd(project_dir) + ["-c", "import pytest_cov"],
             cwd=project_dir, capture_output=True, text=True, check=False
         )
         info["has_pytest_cov"] = result.returncode == 0
@@ -125,7 +161,7 @@ def detect_test_config(project_dir):
 
 def run_tests(project_dir, scheme=None, coverage=True, exclude_patterns=None, test_config=None):
     """Run pytest and return (stdout+stderr, returncode, coverage_json_path)."""
-    cmd = ["python3", "-m", "pytest", "--tb=short", "-q"]
+    cmd = _python_cmd(project_dir) + ["-m", "pytest", "--tb=short", "-q"]
 
     # Add coverage flags if enabled and pytest-cov is available
     coverage_json_path = None

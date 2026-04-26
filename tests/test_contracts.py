@@ -13,6 +13,7 @@ Usage:
 
 from __future__ import annotations
 
+import os
 import sys
 import unittest
 from pathlib import Path
@@ -552,6 +553,83 @@ class TestBicepAdapterBuildCommand(unittest.TestCase):
     def test_standalone_driver_uses_positional(self) -> None:
         cmd = self._capture(["bicep"])
         self.assertEqual(cmd, ["bicep", "build", "main.bicep"])
+
+
+class TestPythonAdapterInterpreter(unittest.TestCase):
+    """Regression tests for _python_cmd() in adapters/python/scripts/test.py.
+
+    Issue #32: bare `python3` was used for both pytest-cov detection and the
+    pytest run, which fails for projects with project-local virtual environments
+    (uv, poetry, plain venv) — system python3 cannot import the project's deps.
+    The helper resolves to a venv interpreter when present, then to `uv run python`,
+    then falls back to system `python3`.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        import importlib.util
+        adapter_path = Path(__file__).resolve().parent.parent / "adapters/python/scripts/test.py"
+        spec = importlib.util.spec_from_file_location("_python_test_adapter", adapter_path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        cls._mod = mod
+
+    def setUp(self) -> None:
+        import tempfile
+        self._tmpdir = tempfile.mkdtemp()
+        self.addCleanup(self._cleanup)
+
+    def _cleanup(self) -> None:
+        import shutil
+        shutil.rmtree(self._tmpdir, ignore_errors=True)
+
+    def _make_venv(self, name: str) -> str:
+        """Create a fake venv interpreter inside the tmp project. Returns its path."""
+        bin_dir = "Scripts" if os.name == "nt" else "bin"
+        exe_name = "python.exe" if os.name == "nt" else "python"
+        venv_bin = os.path.join(self._tmpdir, name, bin_dir)
+        os.makedirs(venv_bin, exist_ok=True)
+        path = os.path.join(venv_bin, exe_name)
+        with open(path, "w") as f:
+            f.write("#!/bin/sh\nexec /usr/bin/env python3 \"$@\"\n")
+        os.chmod(path, 0o755)
+        return path
+
+    def test_dotvenv_takes_priority(self) -> None:
+        venv_python = self._make_venv(".venv")
+        # Even with a `venv/` and uv available, .venv wins.
+        self._make_venv("venv")
+        with open(os.path.join(self._tmpdir, "pyproject.toml"), "w"):
+            pass
+        cmd = self._mod._python_cmd(self._tmpdir)
+        self.assertEqual(cmd, [venv_python])
+
+    def test_venv_used_when_dotvenv_absent(self) -> None:
+        venv_python = self._make_venv("venv")
+        cmd = self._mod._python_cmd(self._tmpdir)
+        self.assertEqual(cmd, [venv_python])
+
+    def test_uv_run_when_pyproject_present_no_venv(self) -> None:
+        with open(os.path.join(self._tmpdir, "pyproject.toml"), "w"):
+            pass
+        # Stub shutil.which inside the adapter module to simulate uv on PATH.
+        original_which = self._mod.shutil.which
+        self._mod.shutil.which = lambda name: "/fake/uv" if name == "uv" else None
+        try:
+            cmd = self._mod._python_cmd(self._tmpdir)
+            self.assertEqual(cmd, ["uv", "run", "python"])
+        finally:
+            self._mod.shutil.which = original_which
+
+    def test_falls_back_to_python3(self) -> None:
+        # No venvs, no pyproject — fallback path. Stub uv away to ensure determinism.
+        original_which = self._mod.shutil.which
+        self._mod.shutil.which = lambda name: None
+        try:
+            cmd = self._mod._python_cmd(self._tmpdir)
+            self.assertEqual(cmd, ["python3"])
+        finally:
+            self._mod.shutil.which = original_which
 
 
 class TestReactAdapterParsers(unittest.TestCase):

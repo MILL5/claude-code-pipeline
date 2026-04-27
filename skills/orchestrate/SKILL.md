@@ -373,6 +373,11 @@ Step 1b: IMPLEMENTATION CLARIFICATION & PLAN (architect-agent, Sonnet default / 
     |  Phase 2: Decompose into task plan with context briefs
     |  Present to user for confirmation
     v
+Step 1.4: PRE-FLIGHT BUILD VERIFICATION (orchestrator, runs build script per stack)
+    |  Run python3 .claude/scripts/<stack>/build.py against the base branch state
+    |  PASS -> proceed; FAIL -> pause, present, ask user (abort | continue | inject Wave 0 fix)
+    |  Catches pre-existing breakage on main BEFORE Haiku tasks fail on it
+    v
 Step 1.5: OPEN PR (open-pr skill)
     |  Create feature branch from main, push, open draft PR
     |  All subsequent work happens on this branch
@@ -566,6 +571,104 @@ the plan.
 **Token tracking:** Record a `TOKEN_LEDGER` entry for the initial 1b agent launch (step `1b`). If implementation clarification questions occur, record each SendMessage round as step `1b:impl-clarify-N`. If plan revisions are requested, record each revision round as step `1b:revision-N`. Agent: `architect-agent`, model: as selected above (`sonnet` or `opus`).
 
 **Plan revisions:** If the user requests changes, use **SendMessage** to the 1b agent (do NOT launch a new agent — the architect must remember its own plan). Iterate until confirmed.
+
+### Step 1.4: PRE-FLIGHT BUILD VERIFICATION
+
+**Why this exists:** Token-analysis on prior runs found that pre-existing build
+breakage on the base branch is a recurring cost driver — Haiku implementers
+hit it during Step 2, fail self-build, and burn fix-cycle tokens chasing a
+problem they didn't cause. Catching the failure once, before Wave 1 launches,
+swaps a $0.20+ multi-task escalation for a single targeted fix.
+
+**Skip rule:** If this run is resuming from a recovery artifact (the pipeline
+detected `.claude/tmp/1b-plan.md` at start and the user opted to resume), skip
+this step — implementation is already in progress and a fresh build check
+would just stall an in-flight run. Also skip if the user explicitly says
+"skip pre-flight" during plan confirmation.
+
+**Procedure:**
+
+1. For each unique stack in `STACK_REGISTRY`, run the stack's build script
+   against the current working tree (which still equals base-branch state at
+   this point — the PR branch hasn't been cut yet):
+
+   ```bash
+   python3 .claude/scripts/<stack>/build.py
+   ```
+
+   Use `Bash` with the default 2-minute timeout. If the build script itself
+   times out, treat as a `FAIL` with note `build script timed out`.
+
+2. Parse the last line of stdout against the build adapter contract:
+   - `BUILD SUCCEEDED  |  N warning(s)` → record `PASS` for that stack
+   - `BUILD FAILED  |  N error(s)  |  M warning(s)` → record `FAIL` with the
+     full stdout/stderr captured for the user prompt
+   - Any other terminating line → record `FAIL` with note `unrecognized build
+     output — check adapter contract`
+
+3. Aggregate results across stacks:
+   - All stacks PASS → proceed silently to Step 1.5.
+   - Any stack FAILED → enter the failure-handling flow below.
+
+**Failure handling:**
+
+Present a single concise prompt to the user. Do NOT spawn an agent — the
+orchestrator handles this directly:
+
+> ⚠ Pre-flight build check failed on the base branch (before any pipeline
+> changes). The implementer agents would hit this during Wave 1.
+>
+> **Failing stack(s):** `<stack> — N error(s)`
+>
+> **Top errors:**
+> ```
+> <first 10 lines of build stderr/stdout, trimmed>
+> ```
+>
+> **Choose:**
+> - **(a) abort** — exit pipeline now; you fix the build manually, then re-run
+>   `/orchestrate` (no PR has been created yet, so nothing to clean up)
+> - **(b) continue anyway** — proceed to Step 1.5 with the broken build;
+>   Haiku tasks may fail and escalate to Sonnet (cost risk: $0.20+)
+> - **(c) inject Wave 0 fix** — orchestrator adds a Sonnet implementer task
+>   "fix pre-existing build failure on base" as a new Wave 0 ahead of the
+>   plan's existing waves; existing wave numbers shift +1
+
+Wait for the user's choice. Map to:
+
+- **(a) abort:** exit `/orchestrate` cleanly. Print a summary of what was
+  decided in 1a/1b (so the user can resume later). Do NOT delete `1a-spec.md`
+  or `1b-plan.md` — recovery should pick up from where this run left off.
+- **(b) continue anyway:** log a `TOKEN_LEDGER` warning entry (step `1.4`,
+  notes `continued with broken build`). Proceed to Step 1.5.
+- **(c) inject Wave 0 fix:** read `.claude/tmp/1b-plan.md`, prepend a new
+  Wave 0 with a single Sonnet implementer task. Brief content:
+
+  ```
+  TASK: Fix pre-existing build failure on the base branch.
+
+  BUILD SCRIPT: python3 .claude/scripts/<failing_stack>/build.py
+  BUILD OUTPUT (truncated to first 50 lines):
+  <captured output>
+
+  ACCEPTANCE: build script outputs `BUILD SUCCEEDED  |  N warning(s)` with
+  zero errors. Do NOT modify project source unrelated to the build error.
+  Do NOT introduce new abstractions. Smallest viable fix only.
+  ```
+
+  Re-write `.claude/tmp/1b-plan.md` with the prepended wave (existing waves
+  re-numbered). Proceed to Step 1.5; Wave 0 will be the first thing
+  implemented. The original feature work begins at the now-renumbered Wave 1.
+
+**Token tracking:** Record one `TOKEN_LEDGER` entry per stack build attempt
+(step `1.4:<stack>`). Agent: `orchestrator`, model: `sonnet`. `input_chars` is
+0 (no prompt — direct subprocess), `output_chars` is the captured build
+output length. If failure handling fires, record an additional entry
+(step `1.4:user-decision`, notes `<a|b|c>`).
+
+**Why before Step 1.5 rather than after:** Opening the PR first means a
+broken build wastes a draft PR if the user aborts. Running the check pre-PR
+lets `(a) abort` exit cleanly with no GitHub-side cleanup.
 
 ### Step 1.5: OPEN PR
 
@@ -1285,6 +1388,9 @@ PR). If no folds occurred, omit the section entirely.
 | Bug fix fails review twice | Launch architect blast-radius analysis, present to user |
 | 3+ bug-fix cycles in one manual test round | Stop, report all outstanding issues for manual triage |
 | Token analysis skill fails | Log warning, report to user, do not block pipeline completion |
+| Pre-flight build (Step 1.4) FAIL | Pause, present build errors, ask user: abort / continue anyway / inject Wave 0 fix |
+| Pre-flight build script times out | Treat as FAIL with `build script timed out` note; fall through to user prompt |
+| Pre-flight build output unrecognized | Treat as FAIL with `unrecognized build output — check adapter contract` note |
 | chrome-ui-test FAIL | Route into Step 3.5.1-3.5.5 bug-fix cycle using its reproduction recipe as the bug report |
 | chrome-ui-test FAIL twice on same scenario after fix | Stop Step 3.4 retries, present findings, hand to user manual test |
 | claude-in-chrome MCP tools not loadable | Skip Step 3.4 silently — user has not authorized chrome for this session |

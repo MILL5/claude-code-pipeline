@@ -1158,6 +1158,12 @@ that satisfies all 6 contract points (see `agents/implementer-contract.md`).
 Append a `backlog_decisions` entry with `action: folded` and a one-line
 reasoning. Count this entry against the fold cap.
 
+**Token tracking for folds:** When recording the implementer and reviewer entries for a
+folded task, set `notes: "fold:<source-phase>:<short-title>"` (e.g.
+`fold:reviewer:Extract validation helper`). The token-analysis skill aggregates entries
+where `notes` starts with `fold:` into a separate "Fold cost" line in the cost breakdown,
+so users can see fold spend independently of the planned wave cost.
+
 ### Run-Log Schema
 
 `.claude/tmp/run-log.yml` accumulates decisions across phases:

@@ -34,6 +34,12 @@ Compute estimated cost per step and per model using these rates:
 
 Identify the top 3 most expensive steps by total cost.
 
+**Folds:** Aggregate `TOKEN_LEDGER` entries whose `notes` field starts with `fold:`
+(folded backlog items spawned mid-run). Report as a separate "Folds" line in the cost
+breakdown table. Folded entries inflate Haiku and Sonnet (review) cost, so surfacing
+them helps users see fold spend distinct from planned-wave cost. Report the count of
+folded items and their cost share. If `folds_cost / total_cost > 25%`, flag as a finding.
+
 ### 2. Model Distribution Analysis
 
 Compare actual model usage **by estimated dollar cost** (not call count or raw token count)
@@ -284,7 +290,14 @@ per-agent costs above)
 | 2.1: Review | X | X | X | $X.XX |
 | 2.2: Fix | X | X | X | $X.XX |
 | 3.5: Bug Fix | X | X | X | $X.XX |
+| Folds | X | X | X | $X.XX |
 | **Total** | **X** | **X** | **X** | **$X.XX** |
+
+**Folds** aggregates `TOKEN_LEDGER` entries whose `notes` field starts with `fold:`
+(implementer + reviewer entries for items folded in via the backlog rule). The Folds row
+is in addition to — not nested inside — the per-step rows; subtract fold tokens from the
+step they ran in if you want pure planned-wave cost. Omit the Folds row when zero entries
+match.
 
 ## Model Distribution
 

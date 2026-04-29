@@ -776,6 +776,46 @@ def check_orchestrate_workflow_optimizations(result: ValidationResult) -> None:
         result.fail("Orchestrate missing background token analysis documentation")
 
 
+def check_orchestrate_fold_notes(result: ValidationResult) -> None:
+    """Folded tasks must use a `fold:<phase>:<title>` notes convention (M5 — issue #35).
+
+    Folds are reviewer/planner-spawned mid-run tasks (Haiku impl + Sonnet review) that
+    inflate cost-weighted model distribution but don't show separately in the planned
+    Step 2/2.1 lines. The `fold:` notes prefix lets token-analysis aggregate fold cost
+    into a dedicated "Folds" row so users see fold spend distinct from planned waves.
+    """
+    orchestrate_path = PIPELINE_ROOT / "skills" / "orchestrate" / "SKILL.md"
+    if not orchestrate_path.exists():
+        return
+
+    content = orchestrate_path.read_text()
+
+    if "fold:" in content and "fold:<source-phase>" in content:
+        result.ok("Orchestrate Backlog Integration documents fold-cost notes pattern")
+    else:
+        result.fail(
+            "Orchestrate Backlog Integration missing 'fold:<source-phase>:...' notes "
+            "convention (M5 mitigation for issue #35)"
+        )
+
+
+def check_token_analysis_fold_line(result: ValidationResult) -> None:
+    """Token-analysis skill must surface fold cost as a separate line (M5)."""
+    path = PIPELINE_ROOT / "skills" / "token-analysis" / "SKILL.md"
+    if not path.exists():
+        return
+
+    content = path.read_text()
+
+    if "Folds" in content and "notes" in content and "fold:" in content:
+        result.ok("Token-analysis skill aggregates fold entries via notes prefix")
+    else:
+        result.fail(
+            "Token-analysis skill missing Folds line / notes-prefix aggregation "
+            "(M5 mitigation for issue #35)"
+        )
+
+
 def check_orchestrate_clarification_cap(result: ValidationResult) -> None:
     """Step 1a must document a round cap with cumulative token budget (M4 — issue #35).
 
@@ -1194,6 +1234,8 @@ def run_all_checks(verbose: bool = False) -> ValidationResult:
         ("ORCHESTRATOR.md no full-file fallback (M2)", check_orchestrate_no_full_orchestrator_fallback),
         ("Micro-plan Haiku review (M3)", check_orchestrate_micro_plan_haiku_review),
         ("1a clarification round cap (M4)", check_orchestrate_clarification_cap),
+        ("Fold-cost notes pattern (M5)", check_orchestrate_fold_notes),
+        ("Token-analysis fold line (M5)", check_token_analysis_fold_line),
         ("Agent frontmatter", check_agent_frontmatter),
         ("Skill frontmatter", check_skill_frontmatter),
         ("Cross-references", check_cross_references),

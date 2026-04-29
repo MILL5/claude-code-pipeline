@@ -304,8 +304,14 @@ are included.
 - `## Key Services / Modules`
 - `## Known Fragile Areas`
 
-**Fallback:** If any expected `##` header is not found in ORCHESTRATOR.md (e.g., the file was
-customized), paste the full file instead of a partial extract.
+**Missing-header handling:** If an expected `##` header is not found in ORCHESTRATOR.md
+(customized or partially populated), include only the headers that DID match plus a
+one-line note appended to the extract: `> NOTE: ORCHESTRATOR.md was missing sections: <list>.
+Treat as best-effort context.` Do NOT load the entire file as a fallback — that defeats the
+extract budget and adds ~6.5K tokens per agent.
+
+If ZERO expected headers match (the file is empty or completely customized), pause and ask
+the user whether to proceed without codebase context or update ORCHESTRATOR.md first.
 
 ## Pipeline Overview
 

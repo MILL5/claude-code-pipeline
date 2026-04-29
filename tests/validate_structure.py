@@ -776,6 +776,36 @@ def check_orchestrate_workflow_optimizations(result: ValidationResult) -> None:
         result.fail("Orchestrate missing background token analysis documentation")
 
 
+def check_orchestrate_no_full_orchestrator_fallback(result: ValidationResult) -> None:
+    """Step 0.7 must not paste the full ORCHESTRATOR.md as a fallback (M2 — issue #39).
+
+    The fixed-overhead finding identified ~6.5K tokens added per agent prompt when the
+    extract logic fell back to loading the entire ORCHESTRATOR.md. The mitigation is
+    partial-extract + missing-header note, never full file.
+    """
+    orchestrate_path = PIPELINE_ROOT / "skills" / "orchestrate" / "SKILL.md"
+    if not orchestrate_path.exists():
+        return
+
+    content = orchestrate_path.read_text()
+
+    if "paste the full file" in content.lower():
+        result.fail(
+            "Orchestrate Step 0.7 still has 'paste the full file' fallback for "
+            "ORCHESTRATOR.md (defeats extract budget — see issue #39)"
+        )
+    else:
+        result.ok("Orchestrate Step 0.7 does not paste full ORCHESTRATOR.md as fallback")
+
+    if "Missing-header handling" in content:
+        result.ok("Orchestrate Step 0.7 documents missing-header handling")
+    else:
+        result.fail(
+            "Orchestrate Step 0.7 missing 'Missing-header handling' section "
+            "(M2 mitigation for issue #39)"
+        )
+
+
 def check_agent_frontmatter(result: ValidationResult) -> None:
     """Agent files must have valid YAML frontmatter with name, model, description."""
     frontmatter_re = re.compile(r"^---\n(.*?)\n---", re.DOTALL)
@@ -1099,6 +1129,7 @@ def run_all_checks(verbose: bool = False) -> ValidationResult:
         ("Version file", check_version_file),
         ("Orchestrate local overlay loading", check_orchestrate_local_overlay_loading),
         ("Workflow optimizations", check_orchestrate_workflow_optimizations),
+        ("ORCHESTRATOR.md no full-file fallback (M2)", check_orchestrate_no_full_orchestrator_fallback),
         ("Agent frontmatter", check_agent_frontmatter),
         ("Skill frontmatter", check_skill_frontmatter),
         ("Cross-references", check_cross_references),

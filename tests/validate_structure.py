@@ -609,6 +609,30 @@ def check_planner_plan_stub(result: ValidationResult) -> None:
         result.ok("Planner does not instruct double-pay full-plan emission")
 
 
+def check_planner_exact_string_brief_hints(result: ValidationResult) -> None:
+    """Planner must document line-range and TRUST THE BRIEF hints for exact-string edit tasks."""
+    path = PIPELINE_ROOT / "skills" / "architect-planner" / "SKILL.md"
+    if not path.exists():
+        return
+
+    content = path.read_text()
+
+    if "exact-string edit" in content.lower() or "exact string edit" in content.lower():
+        result.ok("Planner documents exact-string edit task brief requirements")
+    else:
+        result.fail("Planner missing exact-string edit task brief requirements")
+
+    if "line range" in content.lower() or "line N" in content or "lines N" in content:
+        result.ok("Planner documents line range hint to scope implementer file reads")
+    else:
+        result.fail("Planner missing line range hint for exact-string edit briefs")
+
+    if "do not re-read" in content.lower() or "trust the brief" in content.lower():
+        result.ok("Planner documents TRUST THE BRIEF / do-not-re-read note for exact-string briefs")
+    else:
+        result.fail("Planner missing TRUST THE BRIEF note for exact-string edit briefs")
+
+
 def check_orchestrate_reads_plan_from_disk(result: ValidationResult) -> None:
     """Orchestrate must read 1b-plan.md from disk, not from agent output."""
     orchestrate_path = PIPELINE_ROOT / "skills" / "orchestrate" / "SKILL.md"
@@ -1123,6 +1147,7 @@ def run_all_checks(verbose: bool = False) -> ValidationResult:
         ("Token-analysis fixed overhead", check_token_analysis_fixed_overhead),
         ("Token-analysis small-plan gates", check_token_analysis_small_plan_gates),
         ("Planner PLAN_WRITTEN stub", check_planner_plan_stub),
+        ("Planner exact-string brief hints", check_planner_exact_string_brief_hints),
         ("Orchestrate reads plan from disk", check_orchestrate_reads_plan_from_disk),
         ("ORCHESTRATOR.md template sections", check_orchestrator_template_sections),
         ("Extract profile headers", check_extract_profile_headers),

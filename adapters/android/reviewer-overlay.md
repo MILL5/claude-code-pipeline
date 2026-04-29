@@ -85,3 +85,24 @@ You are a senior Android engineer with deep expertise in Kotlin, Jetpack Compose
 - Platform types from Java interop not explicitly typed (null safety hole)
 - `lateinit` used for nullable state (should be nullable type + null check)
 - Missing KDoc on public API
+
+## Simplification Heuristics
+
+Use these patterns for `[simplify]` tag entries. Only flag a rewrite as
+`[simplify]` when you are confident it preserves observable behavior — when
+in doubt, use `[should-fix]` instead. Tests and the build are the enforcement
+gate; reviewer judgment is the trigger.
+
+- POJO-style class with `equals`/`hashCode`/`toString` overrides → `data class`
+- Manual configuration of an object via setters in sequence → `apply { }`
+- Side-effecting use of an object that returns it → `also { }`
+- Local transformation of a single value → `let { }` (only when it removes
+  a temporary variable)
+- `when` over a boolean / closed type with `else` branch that can never
+  fire → sealed class / sealed interface for exhaustive matching
+- `if (x != null) x.method()` → `x?.method()`
+- `?: throw IllegalStateException(...)` repeated boilerplate →
+  `requireNotNull(x)` / `checkNotNull(x)`
+- `mutableListOf<T>().apply { addAll(...) }` → `buildList { addAll(...) }`
+- Java-interop call returning platform type used immediately → explicit
+  type annotation at the call site (clarity, not just preference)

@@ -72,3 +72,25 @@
 - Correlation IDs propagated across all cross-service operations
 - Structured logging with Azure Monitor/Application Insights — no secrets in logs
 - Resource tagging on all programmatically created resources
+
+## Simplification Heuristics
+
+Use these patterns for `[simplify]` tag entries. Only flag a rewrite as
+`[simplify]` when you are confident it preserves observable behavior — when
+in doubt, use `[should-fix]` instead. Tests and the build are the enforcement
+gate; reviewer judgment is the trigger.
+
+- Hand-built credential chain (env var → MSI → CLI fallback) →
+  `DefaultAzureCredential()` (when chain order matches the SDK default)
+- Connection string from app settings → `ManagedIdentityCredential` /
+  `DefaultAzureCredential` (only when the resource supports AAD auth)
+- Hand-rolled retry loop with sleeps → SDK's built-in retry policy
+  configuration
+- Manual correlation-ID header injection → SDK's distributed tracing
+  configuration (when supported)
+- Per-request client construction in a hot path → singleton/scoped client
+- Manual paging loop concatenating pages → SDK's `AsyncPageable` /
+  `Pageable` iteration helpers
+- `KeyVaultClient.getSecret(name).value` repeated reads → cached secret
+  with TTL respecting Key Vault's recommended refresh cadence (only when
+  rotation cadence is documented)

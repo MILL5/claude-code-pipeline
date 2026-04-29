@@ -88,11 +88,6 @@
 
 ## Simplification Heuristics
 
-Use these patterns for `[simplify]` tag entries. Only flag a rewrite as
-`[simplify]` when you are confident it preserves observable behavior — when
-in doubt, use `[should-fix]` instead. Tests and the build are the enforcement
-gate; reviewer judgment is the trigger.
-
 - Same `useEffect` body in 2+ components with identical deps → custom hook
 - Re-derived value computed every render → `useMemo` (only when dep stability
   is obvious; otherwise leave alone)

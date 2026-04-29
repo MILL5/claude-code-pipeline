@@ -72,11 +72,6 @@
 
 ## Simplification Heuristics
 
-Use these patterns for `[simplify]` tag entries. Only flag a rewrite as
-`[simplify]` when you are confident it preserves observable behavior — when
-in doubt, use `[should-fix]` instead. Tests and the build are the enforcement
-gate; reviewer judgment is the trigger.
-
 - Closure-arg call → trailing closure when it improves readability
 - `guard let x = x else { return }` → optional chaining (`x?.method()`) when no
   control flow other than early return depends on the unwrap

@@ -75,11 +75,6 @@
 
 ## Simplification Heuristics
 
-Use these patterns for `[simplify]` tag entries. Only flag a rewrite as
-`[simplify]` when you are confident it preserves observable behavior — when
-in doubt, use `[should-fix]` instead. Tests and the build are the enforcement
-gate; reviewer judgment is the trigger.
-
 - Hand-built credential chain (env var → MSI → CLI fallback) →
   `DefaultAzureCredential()` (when chain order matches the SDK default)
 - Connection string from app settings → `ManagedIdentityCredential` /

@@ -80,11 +80,6 @@ You are a senior Flutter engineer with deep expertise in Dart, the Flutter frame
 
 ## Simplification Heuristics
 
-Use these patterns for `[simplify]` tag entries. Only flag a rewrite as
-`[simplify]` when you are confident it preserves observable behavior — when
-in doubt, use `[should-fix]` instead. Tests and the build are the enforcement
-gate; reviewer judgment is the trigger.
-
 - Stateless widget with no lifecycle/state → `const` constructor (when all
   child widgets are also `const`-eligible)
 - Builder boilerplate that always returns the same widget given input →

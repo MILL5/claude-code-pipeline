@@ -88,12 +88,6 @@
 
 ## Simplification Heuristics
 
-Use these patterns for `[simplify]` tag entries. Only flag a rewrite as
-`[simplify]` when you are confident it preserves observable behavior — when
-in doubt, use `[should-fix]` instead. The build (`bicep build`), `what-if`
-plan, and structural tests are the enforcement gate; reviewer judgment is
-the trigger.
-
 - Hand-rolled `for` loop building a derived array → `map()` / `filter()` /
   `reduce()` ARM functions
 - Multiple parameters that are always passed together → consolidated

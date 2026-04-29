@@ -88,11 +88,6 @@ You are a senior Android engineer with deep expertise in Kotlin, Jetpack Compose
 
 ## Simplification Heuristics
 
-Use these patterns for `[simplify]` tag entries. Only flag a rewrite as
-`[simplify]` when you are confident it preserves observable behavior — when
-in doubt, use `[should-fix]` instead. Tests and the build are the enforcement
-gate; reviewer judgment is the trigger.
-
 - POJO-style class with `equals`/`hashCode`/`toString` overrides → `data class`
 - Manual configuration of an object via setters in sequence → `apply { }`
 - Side-effecting use of an object that returns it → `also { }`

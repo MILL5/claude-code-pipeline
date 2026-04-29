@@ -93,11 +93,6 @@
 
 ## Simplification Heuristics
 
-Use these patterns for `[simplify]` tag entries. Only flag a rewrite as
-`[simplify]` when you are confident it preserves observable behavior — when
-in doubt, use `[should-fix]` instead. Tests and the build are the enforcement
-gate; reviewer judgment is the trigger.
-
 - `list(map(f, xs))` / `list(filter(p, xs))` → list/dict/set comprehension
 - Class that's just typed fields with `__init__` → `@dataclass`
 - `"text " + str(x) + " more"` / `"text {}".format(x)` → f-string

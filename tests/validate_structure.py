@@ -776,6 +776,37 @@ def check_orchestrate_workflow_optimizations(result: ValidationResult) -> None:
         result.fail("Orchestrate missing background token analysis documentation")
 
 
+def check_orchestrate_clarification_cap(result: ValidationResult) -> None:
+    """Step 1a must document a round cap with cumulative token budget (M4 — issue #35).
+
+    On the 7-task feat run analyzed in issue #35, a 3-round 1a clarification added
+    ~31K incremental tokens beyond the initial launch (Q1-Q5 + sub-questions on Q2/Q3/Q4).
+    Soft-cap of 2 rounds with a 150K cumulative-token hard cap forces closure when the
+    user is digging deeper rather than introducing new decision points.
+    """
+    orchestrate_path = PIPELINE_ROOT / "skills" / "orchestrate" / "SKILL.md"
+    if not orchestrate_path.exists():
+        return
+
+    content = orchestrate_path.read_text()
+
+    if "Round cap" in content and "150K" in content:
+        result.ok("Orchestrate Step 1a documents clarification round cap with token budget")
+    else:
+        result.fail(
+            "Orchestrate Step 1a missing 'Round cap' with cumulative token budget "
+            "(M4 mitigation for issue #35)"
+        )
+
+    if "FINALIZE NOW" in content:
+        result.ok("Orchestrate Step 1a documents FINALIZE NOW escape hatch")
+    else:
+        result.fail(
+            "Orchestrate Step 1a missing 'FINALIZE NOW' escape hatch on token-cap hit "
+            "(M4 mitigation for issue #35)"
+        )
+
+
 def check_orchestrate_micro_plan_haiku_review(result: ValidationResult) -> None:
     """Step 2.1 must document micro-plan Haiku reviewer policy (M3 — issue #39).
 
@@ -1162,6 +1193,7 @@ def run_all_checks(verbose: bool = False) -> ValidationResult:
         ("Workflow optimizations", check_orchestrate_workflow_optimizations),
         ("ORCHESTRATOR.md no full-file fallback (M2)", check_orchestrate_no_full_orchestrator_fallback),
         ("Micro-plan Haiku review (M3)", check_orchestrate_micro_plan_haiku_review),
+        ("1a clarification round cap (M4)", check_orchestrate_clarification_cap),
         ("Agent frontmatter", check_agent_frontmatter),
         ("Skill frontmatter", check_skill_frontmatter),
         ("Cross-references", check_cross_references),

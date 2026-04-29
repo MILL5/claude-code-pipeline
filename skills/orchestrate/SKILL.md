@@ -382,6 +382,15 @@ Prompt: |
   - The user explicitly says "proceed" or "good enough"
 - If the user says proceed before the agent signals complete, instruct the agent via SendMessage to finalize the spec with the information gathered so far.
 
+**Round cap (cost guardrail):** Soft-cap at **2 SendMessage rounds** beyond the initial
+launch. Before sending a 3rd round, check whether the new questions are sub-questions on
+topics already asked (vs. introducing new decision points). If they are sub-questions,
+prompt the user: "The architect has follow-up questions on topics already covered — proceed
+with current understanding or continue clarifying? (proceed | continue)". Respect the
+user's choice. If new topics, allow the round but cap cumulative 1a tokens at ~150K total
+(input + output across all 1a entries in `TOKEN_LEDGER`). On hitting the token cap,
+SendMessage `FINALIZE NOW` and force the agent to write the spec with current information.
+
 **Token tracking:** Record a `TOKEN_LEDGER` entry after the initial agent launch (step `1a`) and after each SendMessage round in the clarification loop (step `1a:clarify-N`). For each entry, measure the composed prompt as `input_chars` and the agent's response as `output_chars`. Agent: `architect-agent`, model: `sonnet`.
 
 **TOKEN_LEDGER gate:** After Step 1a completes and `.claude/tmp/1a-spec.md` is written,

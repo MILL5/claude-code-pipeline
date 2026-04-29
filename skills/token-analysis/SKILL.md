@@ -106,7 +106,7 @@ Evaluate pipeline execution characteristics:
   the value of Step 1a) — use 100% as the flag threshold.
 - **Review cost ratio**: total review + fix tokens vs. implementation tokens. A ratio > 0.5
   suggests implementations are frequently failing review — possible quality issue in context briefs.
-  *(Skip this gate for small plans — see Section 2 small-plan adjustment.)*
+  *(skip for small plans — see Section 2 small-plan adjustment)*
 
 ### 6. Anomaly Detection
 
@@ -133,7 +133,7 @@ invisible to the orchestrator's prompt-level tracking:
 - **Aggregate file-read overhead**: Sum the chars across all `files_read` entries in the
   ledger. If this exceeds 30% of total orchestrator-tracked input chars, flag as a finding —
   agents are spending heavily on disk I/O that the planner could potentially inline.
-  *(Skip this gate for small plans — see Section 2 small-plan adjustment.)*
+  *(skip for small plans — see Section 2 small-plan adjustment)*
 
 Note: Earlier versions of this skill compared `agent_input_self` to orchestrator-tracked
 `input_chars` to compute a "hidden consumption delta." Self-assessed agent input was

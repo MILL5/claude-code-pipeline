@@ -23,55 +23,32 @@ Before starting, read these files (skip if already in context from this session)
 ### SendMessage availability
 
 This skill relies on `SendMessage` for token-efficient agent continuation in Steps 1a,
-1b, 2.1, and 3.5. `SendMessage` is an experimental Claude Code tool gated behind the
-`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` environment variable.
+1b, 2.1, and 3.5. It's gated behind `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`.
 
-**To enable** (persists across sessions — add to `~/.claude/settings.json`):
+**Enable** (add to `~/.claude/settings.json`, then restart Claude Code):
 ```json
-{
-  "env": {
-    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
-  }
-}
+{ "env": { "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1" } }
 ```
-Restart Claude Code, then verify with `ToolSearch: select:SendMessage` — the schema should load.
+Verify with `ToolSearch: select:SendMessage` — the schema should load.
 
 **Addressing:** `SendMessage` must use the agent's **UUID** (the `agentId:` value in the
 `Agent` tool's output), NOT the `name:` field. Named routing requires `TeamCreate` registration
-and is not used by this skill. Example:
+and is not used by this skill. Capture `agentId` from the Agent return and reuse it for all
+subsequent `SendMessage({ to: "<uuid>", ... })` calls. Calling `SendMessage` with the `name:`
+will fail with `No agent named '...' is currently addressable`.
 
-> After `Agent({ name: "wave-reviewer", ... })` returns, the output includes a line like:
-> `agentId: ad67fc84c7259e8ad`
-> Capture that UUID. All subsequent `SendMessage` calls use it:
-> `SendMessage({ to: "ad67fc84c7259e8ad", message: "..." })`
+**Async semantics:** `SendMessage` is fire-and-notify. The call returns immediately; the
+agent's reply arrives later as a `<task-notification>`. In clarification loops, wait for
+the notification before proceeding.
 
-> ⚠️ **Do not assume `name:` makes the agent addressable.** The `name:` field on `Agent(...)`
-> is for UI display and attribution only — it does NOT register the agent for `SendMessage`
-> routing. If you call `SendMessage({ to: "wave-reviewer", ... })` expecting it to route by
-> name, you will get `No agent named '...' is currently addressable` even within the same
-> session that spawned the agent. **Always capture and reuse the `agentId` UUID.**
-
-**Async semantics:** `SendMessage` is fire-and-notify, not request-and-wait. The call returns
-immediately; the resumed agent's reply arrives later as a `<task-notification>`. The
-clarification loops in Steps 1a and 1b work as follows: relay questions to the user, receive
-answers, call `SendMessage` with the UUID, then wait for the `<task-notification>` before
-proceeding to the next step.
-
-**Fallback when unavailable:** If `ToolSearch: select:SendMessage` returns no matches (env var
-not set), launch a fresh `Agent` with prior context re-embedded in the prompt for each
-continuation. Accept the ~30–40% higher input token cost. Do NOT attempt `SendMessage` when
-the tool is unavailable — the call will fail with "No matching deferred tools found".
+**Fallback when unavailable:** If `ToolSearch: select:SendMessage` returns no matches, launch a
+fresh `Agent` with prior context re-embedded for each continuation (~30–40% higher input cost).
+Do not attempt `SendMessage` when the tool is unavailable.
 
 ### Do not call `ScheduleWakeup` during `/orchestrate`
 
-`ScheduleWakeup` is a `/loop` dynamic-mode primitive — firing it will re-invoke `/orchestrate`
-with the same arguments. The recovery-artifact check (`1a-spec.md` / `1b-plan.md`) will detect
-an in-progress run and prompt to resume, but the re-entry is confusing and wastes tokens.
-
-When you need to wait for a background agent, wait for the `<task-notification>` tool result
-instead — do not self-schedule. If you genuinely need to poll for an external condition,
-use a polling pattern inside `/orchestrate` (e.g. `Bash` with `run_in_background` + notification),
-not `ScheduleWakeup`.
+`ScheduleWakeup` re-invokes `/orchestrate` (it's a `/loop` primitive). Wait for the agent's
+`<task-notification>` instead. For external polling, use `Bash` with `run_in_background`.
 
 ## Step 0: Load Adapters
 
@@ -224,35 +201,19 @@ After loading cross-cutting overlays, check for project-specific local overlays 
 
 ## Step 0.3: Azure Authentication Pre-Flight
 
-**When to run:** If `ACTIVE_CAPABILITIES` includes `azure-auth`, AND the pipeline will
-perform Azure-dependent operations (what-if, deploy, drift-check, infra-test).
+**When:** `ACTIVE_CAPABILITIES` includes `azure-auth` AND the pipeline will perform Azure-dependent
+operations (what-if, deploy, drift-check, infra-test). Skip for local-only operations (build,
+lint, scan, cost estimate). Runs lazily — only before the first Azure-dependent step.
 
-**Skip if:** The pipeline only involves local operations (build, lint, scan, cost estimate).
-Build and review steps do NOT require Azure auth.
+**How:** Invoke the `azure-login` skill (verifies `az` CLI, `az account show`, displays
+subscription/tenant/user/auth method, caches result as `AZURE_AUTH_STATUS`).
 
-**How to run:** Invoke the `azure-login` skill. It will:
-
-1. Verify `az` CLI is installed
-2. Verify the user is authenticated (`az account show`)
-3. Display the active subscription, tenant, user, and auth method
-4. Cache the result as `AZURE_AUTH_STATUS` for the session
-
-**On failure:** The `azure-login` skill prints remediation guidance. The pipeline should:
-- **Pause** and present the guidance to the user
-- **Ask** the user to authenticate (e.g., `! az login` in the Claude Code prompt)
-- **Retry** the pre-flight check after the user confirms they have logged in
-- **Do NOT** proceed with Azure-dependent steps if auth fails
-
-**On success:** Record the auth context:
-- `AZURE_AUTH_STATUS = OK`
-- `AZURE_SUBSCRIPTION_ID`, `AZURE_SUBSCRIPTION_NAME`, `AZURE_TENANT_ID`
-- `AZURE_USER`, `AZURE_AUTH_METHOD`
-
-Subsequent Azure-dependent skills check `AZURE_AUTH_STATUS` and skip re-validation if already OK.
-If the target subscription or resource group changes mid-pipeline, re-validate.
-
-**Timing:** This check runs lazily — only before the first Azure-dependent step, not at pipeline
-start. This avoids blocking developers who are only doing local build/lint/review cycles.
+- **On failure:** pause, present skill's remediation guidance, ask user to `! az login` in the
+  Claude Code prompt, retry after confirmation. Do NOT proceed with Azure-dependent steps.
+- **On success:** record `AZURE_AUTH_STATUS = OK`, `AZURE_SUBSCRIPTION_ID`,
+  `AZURE_SUBSCRIPTION_NAME`, `AZURE_TENANT_ID`, `AZURE_USER`, `AZURE_AUTH_METHOD`. Subsequent
+  Azure-dependent skills check `AZURE_AUTH_STATUS` and skip re-validation if already OK.
+  Re-validate if the target subscription or resource group changes mid-pipeline.
 
 ## Step 0.6: Initialize Token Tracking
 
@@ -277,20 +238,11 @@ accumulates token usage data for every agent call throughout the pipeline. Also 
 | `files_read` | list | Files the agent read from disk (from TOKEN_REPORT), with approximate sizes |
 | `tool_calls` | map | Tool call counts from the agent's TOKEN_REPORT |
 
-**How to record:** After every Agent launch or SendMessage call:
-1. Measure the composed prompt length as `input_chars` and the agent's complete response as
-   `output_chars`. Compute approximate tokens as `chars / 4`.
-2. Parse the agent's `---TOKEN_REPORT---` block (compact format, 3 lines) to extract
-   `files_read` and `tool_calls`. These capture file-read consumption invisible to the
-   orchestrator.
-3. If the TOKEN_REPORT is missing or malformed, leave those fields empty — do not fail.
-4. Append the entry to `TOKEN_LEDGER`.
-
-**Note on self-assessed fields:** Earlier ledger versions tracked `agent_input_self` /
-`agent_output_self` from `SELF_ASSESSED_INPUT/OUTPUT` lines in agent reports. These were
-unreliable (agents cannot accurately count their own prompt size) and have been removed.
-Token-analysis estimates orchestrator overhead from known fixed sizes (skill files,
-overlays, agent definitions) rather than agent self-reports.
+**How to record:** After every Agent launch or SendMessage call, measure prompt length as
+`input_chars` and complete response as `output_chars` (tokens = chars / 4). Parse the agent's
+`---TOKEN_REPORT---` block (compact 3-line format) for `files_read` and `tool_calls`. If the
+TOKEN_REPORT is missing or malformed, leave those fields empty — do not fail. Append the
+entry to `TOKEN_LEDGER`.
 
 ## Step 0.65: Initialize Backlog Integration State
 
@@ -357,70 +309,20 @@ customized), paste the full file instead of a partial extract.
 
 ## Pipeline Overview
 
-```
-User Request
-    |
-    v
-Step 1a: FEATURE CLARIFICATION (architect-agent, Sonnet, interactive)
-    |  Pre-flight check -> feature decomposition -> feature-only Q&A (iterative, max 3 rounds)
-    |  Questions: scope, behavior, edge cases, business rules, DoD — NO technical questions
-    |  Writes: .claude/tmp/1a-spec.md (enriched spec + recovery artifact)
-    v
-Step 1b: IMPLEMENTATION CLARIFICATION & PLAN (architect-agent, Sonnet default / Opus, fresh agent)
-    |  Reads: 1a-spec.md + 1b Extract from ORCHESTRATOR.md (clean context, ~12K tokens)
-    |  Phase 1: Analyze codebase + enriched spec -> implementation Q&A (max 2 rounds)
-    |  Questions: architecture approach, patterns, integration, data modeling, tradeoffs
-    |  Phase 2: Decompose into task plan with context briefs
-    |  Present to user for confirmation
-    v
-Step 1.4: PRE-FLIGHT BUILD VERIFICATION (orchestrator, runs build script per stack)
-    |  Run python3 .claude/scripts/<stack>/build.py against the base branch state
-    |  PASS -> proceed; FAIL -> pause, present, ask user (abort | continue | inject Wave 0 fix)
-    |  Catches pre-existing breakage on main BEFORE Haiku tasks fail on it
-    v
-Step 1.5: OPEN PR (open-pr skill)
-    |  Create feature branch from main, push, open draft PR
-    |  All subsequent work happens on this branch
-    v
-Step 2: IMPLEMENT (implementer-agent agents, parallel where possible)
-    |  Each agent: implement -> self-review -> build -> test (>=90% coverage)
-    |  Returns: SUCCESS + commit message  OR  FAILURE + error report
-    |
-    v  (for each successful agent)
-Step 2.1: REVIEW (code-reviewer-agent, Sonnet)
-    |  Returns: PASS  OR  FAIL + issues list
-    |
-    v  (if FAIL)
-Step 2.2: FIX (implementer-agent, same worktree)
-    |  Fix code-reviewer findings, re-build, re-test
-    |  Returns: SUCCESS + updated commit message  OR  FAILURE + error report
-    |
-    v  (repeat 2.1 -> 2.2 max 2 times, then escalate to user)
-Step 3: COMMIT + PUSH (orchestrator commits per agent, pushes to PR branch)
-    |  Uses the SUCCESS message verbatim as the git commit message
-    |  Record test baseline (total passing count) after all waves complete
-    v
-Step 3.4: AUTOMATED BROWSER UI TEST (chrome-ui-test skill, conditional)
-    |  Auto-fires when ACTIVE_CAPABILITIES includes `browser-ui`, this run touched
-    |    browser-ui files, AND the claude-in-chrome MCP tools are loadable
-    |  Drives the dev server in Chrome via claude-in-chrome MCP tools
-    |  Returns PASS or FAIL — FAIL feeds the same bug-fix cycle as Step 3.5
-    v
-Step 3.5: MANUAL TEST (user tests PR branch)
-    |  User reports bugs OR says "tests pass"
-    |  Each bug: assess blast radius -> fix (Sonnet) -> review -> full test suite -> commit
-    |  Regression guard: test count must not decrease from baseline
-    |  Escalation: 2 failed fixes OR test count drop -> architect blast-radius analysis
-    |  Loop until user says "tests pass"
-    v
-Step 4: FINALIZE (update .claude/ORCHESTRATOR.md, update PR, mark ready for review)
-    |
-    v
-Step 5: TOKEN ANALYSIS (mandatory, token-analysis skill)
-    |  Reads: TOKEN_LEDGER accumulated during pipeline
-    |  Analyzes: cost efficiency, model distribution, prompt bloat, escalation patterns
-    |  Files: GitHub issue on pipeline repo if significant findings exist
-```
+| Step | Agent / Skill | Model | Output |
+|------|---------------|-------|--------|
+| 1a | architect-agent (analyze + clarify, ≤3 rounds, feature-only Q&A) | Sonnet | `.claude/tmp/1a-spec.md` |
+| 1b | architect-agent (impl Q&A ≤2 rounds, decompose, write plan) | Sonnet (Opus on novel arch) | `.claude/tmp/1b-plan.md` + `PLAN_WRITTEN` stub |
+| 1.4 | orchestrator (pre-flight build per stack against base branch) | — | PASS or user-prompted (abort / continue / inject Wave 0) |
+| 1.5 | open-pr skill | — | feature branch + draft PR |
+| 2 | implementer-agent per task (parallel within wave, ≤4 per batch) | Haiku / Sonnet / Opus | SUCCESS + commit msg, or FAILURE |
+| 2.1 | code-reviewer-agent (one per wave, reused via SendMessage, cap 8) | Sonnet | PASS or FAIL + issues |
+| 2.2 | implementer-agent (same worktree, escalates Haiku→Sonnet on fix) | Sonnet | SUCCESS, or FAILURE after ≤2 cycles |
+| 3 | orchestrator (commit verbatim per agent, push, record test baseline) | — | commits on PR branch |
+| 3.4 | chrome-ui-test (conditional: `browser-ui` capability + UI files + MCP loadable) | Sonnet | PASS or routes FAIL into 3.5 cycle |
+| 3.5 | orchestrator + agents (manual test loop, blast-radius on complex bugs) | Sonnet | bug fixes committed; loop until user says "tests pass" |
+| 4 | orchestrator (update ORCHESTRATOR.md, finalize PR, mark ready) | — | PR ready for review |
+| 5 | token-analysis skill (mandatory, runs in background concurrent with 4) | Sonnet | GitHub issue on pipeline repo if findings exist |
 
 ## Detailed Steps
 
@@ -492,18 +394,15 @@ Do NOT abort the pipeline. Continue with implementation but note the tracking ga
 
 Launch a **fresh** architect-agent in 1b mode. Do NOT use SendMessage from the 1a agent — start a new agent so 1b has a clean context window (~15K tokens of focused signal vs. the full 1a Q&A history).
 
-**Model selection:** Default to **Sonnet** for Step 1b. Only escalate to **Opus** when the
-1a-spec indicates at least one of:
+**Model selection:** Default to **Sonnet**. Escalate to **Opus** only when the 1a-spec indicates
+at least one of:
 - Novel architecture with no existing patterns in the codebase to follow
 - Cross-cutting changes affecting 3+ services/modules with shared state
 - Concurrent/async coordination requiring holistic correctness reasoning
 - Security-critical design where subtle errors have severe consequences
 
-Most feature work — CRUD endpoints, UI components, config changes, test additions,
-mechanical refactors — does not need Opus-level planning. The planner skill's decomposition
-logic works equally well on Sonnet for well-understood problem types. When in doubt, start
-with Sonnet; if the plan quality is poor (vague briefs, missed dependencies), the user can
-request a re-plan with Opus.
+If plan quality is poor on Sonnet (vague briefs, missed dependencies), the user can request a
+re-plan with Opus.
 
 ```
 Agent: architect-agent
@@ -574,17 +473,11 @@ the plan.
 
 ### Step 1.4: PRE-FLIGHT BUILD VERIFICATION
 
-**Why this exists:** Token-analysis on prior runs found that pre-existing build
-breakage on the base branch is a recurring cost driver — Haiku implementers
-hit it during Step 2, fail self-build, and burn fix-cycle tokens chasing a
-problem they didn't cause. Catching the failure once, before Wave 1 launches,
-swaps a $0.20+ multi-task escalation for a single targeted fix.
+Catches pre-existing build breakage on the base branch before Wave 1 launches —
+swaps a multi-task Haiku escalation for a single targeted fix.
 
-**Skip rule:** If this run is resuming from a recovery artifact (the pipeline
-detected `.claude/tmp/1b-plan.md` at start and the user opted to resume), skip
-this step — implementation is already in progress and a fresh build check
-would just stall an in-flight run. Also skip if the user explicitly says
-"skip pre-flight" during plan confirmation.
+**Skip if:** resuming from a recovery artifact, or the user said "skip pre-flight"
+during plan confirmation.
 
 **Procedure:**
 
@@ -610,55 +503,26 @@ would just stall an in-flight run. Also skip if the user explicitly says
    - All stacks PASS → proceed silently to Step 1.5.
    - Any stack FAILED → enter the failure-handling flow below.
 
-**Failure handling:**
+**Failure handling:** Present a concise prompt directly (no agent):
 
-Present a single concise prompt to the user. Do NOT spawn an agent — the
-orchestrator handles this directly:
+> ⚠ Pre-flight build check failed on the base branch. Implementers would hit this in Wave 1.
+> Failing stack(s): `<stack> — N error(s)`. Top errors: ```<first 10 lines of stderr/stdout>```
+> Choose: **(a) abort** (you fix manually then re-run; no PR created yet),
+> **(b) continue anyway** (Haiku may fail and escalate; cost risk $0.20+),
+> **(c) inject Wave 0 fix** (Sonnet task prepended; existing waves shift +1).
 
-> ⚠ Pre-flight build check failed on the base branch (before any pipeline
-> changes). The implementer agents would hit this during Wave 1.
->
-> **Failing stack(s):** `<stack> — N error(s)`
->
-> **Top errors:**
-> ```
-> <first 10 lines of build stderr/stdout, trimmed>
-> ```
->
-> **Choose:**
-> - **(a) abort** — exit pipeline now; you fix the build manually, then re-run
->   `/orchestrate` (no PR has been created yet, so nothing to clean up)
-> - **(b) continue anyway** — proceed to Step 1.5 with the broken build;
->   Haiku tasks may fail and escalate to Sonnet (cost risk: $0.20+)
-> - **(c) inject Wave 0 fix** — orchestrator adds a Sonnet implementer task
->   "fix pre-existing build failure on base" as a new Wave 0 ahead of the
->   plan's existing waves; existing wave numbers shift +1
-
-Wait for the user's choice. Map to:
-
-- **(a) abort:** exit `/orchestrate` cleanly. Print a summary of what was
-  decided in 1a/1b (so the user can resume later). Do NOT delete `1a-spec.md`
-  or `1b-plan.md` — recovery should pick up from where this run left off.
-- **(b) continue anyway:** log a `TOKEN_LEDGER` warning entry (step `1.4`,
-  notes `continued with broken build`). Proceed to Step 1.5.
-- **(c) inject Wave 0 fix:** read `.claude/tmp/1b-plan.md`, prepend a new
-  Wave 0 with a single Sonnet implementer task. Brief content:
-
-  ```
-  TASK: Fix pre-existing build failure on the base branch.
-
-  BUILD SCRIPT: python3 .claude/scripts/<failing_stack>/build.py
-  BUILD OUTPUT (truncated to first 50 lines):
-  <captured output>
-
-  ACCEPTANCE: build script outputs `BUILD SUCCEEDED  |  N warning(s)` with
-  zero errors. Do NOT modify project source unrelated to the build error.
-  Do NOT introduce new abstractions. Smallest viable fix only.
-  ```
-
-  Re-write `.claude/tmp/1b-plan.md` with the prepended wave (existing waves
-  re-numbered). Proceed to Step 1.5; Wave 0 will be the first thing
-  implemented. The original feature work begins at the now-renumbered Wave 1.
+Wait for the user's choice:
+- **(a):** exit `/orchestrate` cleanly. Print a 1a/1b summary so the user can resume. Do NOT
+  delete `1a-spec.md` or `1b-plan.md`.
+- **(b):** log a `TOKEN_LEDGER` warning entry (`1.4`, notes `continued with broken build`).
+  Proceed to Step 1.5.
+- **(c):** prepend a new Wave 0 to `.claude/tmp/1b-plan.md` with a single Sonnet implementer
+  task. Brief: "Fix pre-existing build failure on the base branch.
+  BUILD SCRIPT: `python3 .claude/scripts/<failing_stack>/build.py`.
+  BUILD OUTPUT (first 50 lines): <captured>.
+  ACCEPTANCE: build script outputs `BUILD SUCCEEDED | N warning(s)` with zero errors.
+  Smallest viable fix only — do NOT modify unrelated source or introduce new abstractions."
+  Re-number existing waves; original feature work starts at the now-renumbered Wave 1.
 
 **Token tracking:** Record one `TOKEN_LEDGER` entry per stack build attempt
 (step `1.4:<stack>`). Agent: `orchestrator`, model: `sonnet`. `input_chars` is
@@ -666,9 +530,7 @@ Wait for the user's choice. Map to:
 output length. If failure handling fires, record an additional entry
 (step `1.4:user-decision`, notes `<a|b|c>`).
 
-**Why before Step 1.5 rather than after:** Opening the PR first means a
-broken build wastes a draft PR if the user aborts. Running the check pre-PR
-lets `(a) abort` exit cleanly with no GitHub-side cleanup.
+Runs pre-PR so `(a) abort` exits cleanly with no GitHub-side cleanup.
 
 ### Step 1.5: OPEN PR
 
@@ -696,11 +558,9 @@ reviewer agent). This overlaps review work with still-running implementer tasks,
 wall-clock time. The reviewer agent is launched on the first SUCCESS result; subsequent results
 use SendMessage. Failed implementers are reported to the user immediately without waiting.
 
-**Batch cap:** If a wave contains more than 4 tasks assigned to the same model, split them
-into multiple agent calls of at most 4 tasks each. This reduces blast radius (a failure at
-task 3 doesn't require re-running tasks 5-8) and keeps individual agent calls under ~50K
-input tokens. The planner should ideally keep waves to ≤4 tasks, but if it produces larger
-waves, the orchestrator enforces the cap here.
+**Batch cap:** If a wave has more than 4 tasks at the same model, split into batches of ≤4
+to reduce blast radius and keep individual agent calls under ~50K input tokens. The planner
+should keep waves ≤4 tasks; the orchestrator enforces the cap if not.
 
 For each task (or batch of up to 4 tasks) in the current wave:
 
@@ -736,13 +596,10 @@ Prompt: |
   <paste the context brief from the architect's plan here>
 ```
 
-**Overlay selection rationale:** Haiku tasks receive only the essential rules (~500-800 chars)
-to maximize signal-to-noise ratio. The reviewer in Step 2.1 has the full overlay and will catch
-any violations. Sonnet/Opus tasks receive the full overlay since they handle complex tasks where
-examples and patterns are valuable.
-
-**Stack scoping rationale:** The implementer only needs rules for the stack it is working in.
-Loading all stacks' overlays would dilute Haiku's signal-to-noise ratio and waste tokens.
+**Overlay selection:** Haiku tasks get the essential variant (~500-800 chars); Sonnet/Opus tasks
+get the full overlay. The reviewer in Step 2.1 has the full overlay and catches any Haiku
+violations. The implementer only loads the overlay for its task's stack — loading all stacks
+would dilute Haiku's signal-to-noise ratio.
 
 **After each implementer returns** (as soon as it completes, not after the full wave):
 
@@ -944,11 +801,8 @@ invocation (step `3.4`). Agent: `orchestrator` (skill, not an Agent launch),
 model: `sonnet` (the orchestrator's own model). If a re-run occurs after a
 fix, record it as `3.4:retry-N`.
 
-**Why this runs before Step 3.5 rather than replacing it:** The automated
-smoke catches obvious wiring failures (uncaught exceptions, missing imports,
-broken routes) before bothering the user, but it cannot judge UX, copy,
-visual correctness, or business-rule edge cases. The user's manual test
-remains authoritative.
+The automated smoke catches wiring failures; the user's manual test in 3.5 remains authoritative
+for UX, copy, and business-rule edge cases.
 
 ### Step 3.5: MANUAL TEST
 
@@ -1181,73 +1035,41 @@ The orchestrator does NOT merge — the user decides when to merge.
 
 ### Step 5: TOKEN ANALYSIS (mandatory)
 
-**Timing:** Launch token analysis **in the background** at the same time as Step 4 finalization.
-The TOKEN_LEDGER is complete after Step 3.5 — it does not depend on PR finalization. This
-overlaps analysis work with ORCHESTRATOR.md updates, PR body updates, and `gh pr ready`,
-reducing wall-clock time. If analysis files a GitHub issue, report it to the user after
-Step 4 completes (or immediately if Step 4 finishes first).
+Launch token analysis **in the background** concurrently with Step 4 finalization — the
+TOKEN_LEDGER is complete after Step 3.5, so analysis can run while ORCHESTRATOR.md is updated
+and `gh pr ready` runs. Always runs, not skippable.
 
-This step always runs — it is not skippable.
+**5.1 Compute Summary.** Record `PIPELINE_END`. Compute `TOKEN_SUMMARY` from `TOKEN_LEDGER`:
+totals across all entries, per-model breakdown (call count + input/output tokens), per-step
+breakdown by prefix (`1a`, `1b`, `1.5`, `2`, `2.1`, `2.2`, `3.5`), estimated cost (Haiku $1/$5,
+Sonnet $3/$15, Opus $15/$75 per M tokens in/out), actual cost-weighted model distribution vs.
+the 70/20/10 target, and counts of `is_escalation`/`is_retry` entries.
 
-#### 5.1: Compute Summary
+**5.2 Derive Pipeline Repo.** `PIPELINE_REMOTE=$(git -C <pipeline_root> remote get-url origin)`.
+Parse SSH (`git@github.com:owner/repo.git`) or HTTPS (`https://github.com/owner/repo.git`),
+strip trailing `.git`.
 
-Record `PIPELINE_END` as the current timestamp. Compute `TOKEN_SUMMARY` from the `TOKEN_LEDGER`:
-
-- **Total tokens**: sum of all `input_tokens` and `output_tokens` across all ledger entries
-- **Model breakdown**: for each model (haiku, sonnet, opus) — call count, total input tokens,
-  total output tokens
-- **Step breakdown**: for each step prefix (1a, 1b, 1.5, 2, 2.1, 2.2, 3.5) — call count, total
-  input tokens, total output tokens
-- **Estimated cost**: using pricing Haiku $1/$5, Sonnet $3/$15, Opus $15/$75 per M tokens (in/out)
-- **Actual model distribution**: percentage of total token spend per model vs. the 70/20/10 target
-- **Escalation count**: entries where `is_escalation` is true
-- **Retry count**: entries where `is_retry` is true
-
-#### 5.2: Derive Pipeline Repo
-
-Resolve the pipeline repo's GitHub `owner/repo` for issue filing:
-
-```bash
-PIPELINE_REMOTE=$(git -C <pipeline_root> remote get-url origin)
-```
-
-Parse `PIPELINE_REMOTE` to extract `owner/repo`:
-- SSH format `git@github.com:owner/repo.git` → `owner/repo`
-- HTTPS format `https://github.com/owner/repo.git` → `owner/repo`
-- Strip trailing `.git` if present
-
-#### 5.3: Launch Token Analysis
-
-Read `.claude/skills/token-analysis/SKILL.md` for the skill's full instructions, then invoke it:
+**5.3 Launch Token Analysis.** Invoke the skill with the ledger, summary, and pipeline context:
 
 ```
 Skill: token-analysis
 Prompt: |
   Read `.claude/skills/token-analysis/SKILL.md` for your instructions.
 
-  TOKEN LEDGER:
-  <paste the full TOKEN_LEDGER as a markdown table>
-
-  TOKEN SUMMARY:
-  <paste the computed TOKEN_SUMMARY>
+  TOKEN LEDGER: <paste the full TOKEN_LEDGER as a markdown table>
+  TOKEN SUMMARY: <paste the computed TOKEN_SUMMARY>
 
   PIPELINE CONTEXT:
-  - Plan file: .claude/tmp/1b-plan.md (read for planned vs actual model assignments)
+  - Plan file: .claude/tmp/1b-plan.md (planned vs actual model assignments)
   - Pipeline repo: <owner/repo>
   - Pipeline root: <pipeline_root>
   - Target project stacks: <stacks (comma-separated)>
   - Pipeline duration: <PIPELINE_START> to <PIPELINE_END>
 ```
 
-#### 5.4: Report Results
-
-- If the skill returns `FINDINGS: NONE`, report to the user:
-  > "Token analysis complete — no significant optimization opportunities found."
-- If the skill returns `FINDINGS: FILED` with an issue URL, report to the user:
-  > "Token analysis complete — findings filed as <issue URL>."
-- If the skill fails or `gh issue create` errors, log a warning and report to the user. Do NOT
-  consider the pipeline failed — all substantive work (implementation, review, commit, PR) is
-  already complete.
+**5.4 Report Results.** `FINDINGS: NONE` → "no significant optimization opportunities found".
+`FINDINGS: FILED` with issue URL → "findings filed as <issue URL>". Skill failure or
+`gh issue create` error → log a warning and report; do NOT mark the pipeline failed.
 
 ---
 
@@ -1285,30 +1107,22 @@ implementation work.
 
 ### Filing a Deferred Item
 
-Use the shared utility — do not shell out to `gh` directly:
+Use the shared utility (do not shell out to `gh` directly):
 
 ```bash
 python3 .claude/pipeline/scripts/backlog_file.py \
-  --title "<short imperative title>" \
-  --type chore --priority p2 \
-  --body-context-json '{
-    "phase": "reviewer",
-    "pr_number": "'"$PR_NUMBER"'",
-    "run_id": "'"$(cat .claude/tmp/run-id)"'",
-    "reasoning": "<one-line: why this defers, not folds>",
-    "summary": "<one-line summary>",
-    "context": "<multi-line context from the surfacing phase>"
-  }'
+  --title "<short imperative title>" --type chore --priority p2 \
+  --body-context-json '{"phase": "<reviewer|planner|implementer>", "pr_number": "'"$PR_NUMBER"'",
+    "run_id": "'"$(cat .claude/tmp/run-id)"'", "reasoning": "<why defer not fold>",
+    "summary": "<one-line>", "context": "<multi-line context>"}'
 ```
 
-Parse the utility's JSON output. Possible outcomes:
-- `{"status": "filed", "url": "...", "number": N}` — issue created, append to
-  `backlog_decisions` with `action: deferred` and `issue_url`.
-- `{"status": "skipped", "reason": "..."}` — sentinel absent or disabled;
-  append to `backlog_decisions` with `action: skipped` and emit the one-time
-  hint if this is the first skip of the run.
-- `{"status": "failed", "reason": "..."}` — `gh` errored; append with
-  `action: failed` and `issue_url: null`, log a warning, continue the run.
+Parse the utility's JSON output and append to `backlog_decisions`:
+- `{"status": "filed", "url": ..., "number": N}` → `action: deferred`, record `issue_url`.
+- `{"status": "skipped", "reason": ...}` → `action: skipped`; emit the one-time hint on first
+  skip of the run.
+- `{"status": "failed", "reason": ...}` → `action: failed`, `issue_url: null`, log warning,
+  continue the run.
 
 ### Folding an Item (spawn new implementer task)
 

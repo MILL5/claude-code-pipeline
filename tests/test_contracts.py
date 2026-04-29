@@ -124,6 +124,28 @@ class TestReviewerProtocol(unittest.TestCase):
             self.assertTrue(s["text"])
             self.assertFalse(s["text"].startswith("["))
 
+    def test_simplify_tag_recognized(self) -> None:
+        fixture = (FIXTURES_DIR / "reviewer-pass-with-simplify-tagged.txt").read_text()
+        result = parse_reviewer_result(fixture)
+        self.assertEqual(result["status"], "PASS")
+        suggestions = result["suggestions"]
+        self.assertEqual(len(suggestions), 1)
+        self.assertEqual(suggestions[0]["tag"], "simplify")
+        self.assertTrue(suggestions[0]["text"])
+        self.assertFalse(suggestions[0]["text"].startswith("["))
+
+    def test_all_three_tags_coexist(self) -> None:
+        fixture = (FIXTURES_DIR / "reviewer-pass-with-all-three-tags.txt").read_text()
+        result = parse_reviewer_result(fixture)
+        self.assertEqual(result["status"], "PASS")
+        suggestions = result["suggestions"]
+        self.assertEqual(len(suggestions), 3)
+        tags = {s["tag"] for s in suggestions}
+        self.assertEqual(tags, {"should-fix", "nice-to-have", "simplify"})
+        for s in suggestions:
+            self.assertTrue(s["text"])
+            self.assertFalse(s["text"].startswith("["))
+
     def test_untagged_entries_preserve_null_tag(self) -> None:
         fixture = (FIXTURES_DIR / "reviewer-fail.txt").read_text()
         result = parse_reviewer_result(fixture)

@@ -1,0 +1,69 @@
+name: Version Bump
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    # Skip the version-bump commit itself to avoid re-triggering
+    if: "!startsWith(github.event.head_commit.message, 'chore: bump version')"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # RELEASE_TOKEN must be a fine-grained PAT (or classic PAT with repo scope)
+          # belonging to an admin. It bypasses branch protection for the version bump
+          # commit. Create it at GitHub → Settings → Developer settings → Personal
+          # access tokens, then add it as a repo secret named RELEASE_TOKEN.
+          token: ${{ secrets.RELEASE_TOKEN }}
+
+      - name: Determine bump type from commit message
+        id: bump_type
+        env:
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+        run: |
+          # Breaking change: feat!: or fix!: or BREAKING CHANGE in body
+          if echo "$COMMIT_MSG" | grep -qE '^[a-z]+(\([^)]+\))?!:|BREAKING CHANGE'; then
+            echo "type=major" >> "$GITHUB_OUTPUT"
+          # New feature: feat(...): or a PR merged from a feat/ branch
+          elif echo "$COMMIT_MSG" | grep -qE '^feat(\([^)]+\))?:|Merge pull request.*/feat/'; then
+            echo "type=minor" >> "$GITHUB_OUTPUT"
+          # Everything else (fix, perf, refactor, chore, docs, ci, test) → patch
+          else
+            echo "type=patch" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Compute and write new version
+        id: version
+        run: |
+          IFS='.' read -r MAJOR MINOR PATCH < VERSION
+          case "${{ steps.bump_type.outputs.type }}" in
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH + 1)) ;;
+          esac
+          NEW="$MAJOR.$MINOR.$PATCH"
+          echo "$NEW" > VERSION
+          echo "new=$NEW" >> "$GITHUB_OUTPUT"
+          echo "tag=v$NEW" >> "$GITHUB_OUTPUT"
+
+      - name: Commit VERSION, push tag, create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # gh CLI uses this for release creation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add VERSION
+          git commit -m "chore: bump version to ${{ steps.version.outputs.new }}"
+          git tag "${{ steps.version.outputs.tag }}"
+          git push origin main
+          git push origin "${{ steps.version.outputs.tag }}"
+          gh release create "${{ steps.version.outputs.tag }}" \
+            --title "${{ steps.version.outputs.tag }}" \
+            --generate-notes

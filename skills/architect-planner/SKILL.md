@@ -171,6 +171,19 @@ A context brief includes:
 5. **Output specification**: Exact public API, method signatures, expected behavior
 6. **Constraints**: Naming conventions, patterns to follow, error handling approach. For Haiku tasks, embed the 1-2 most relevant rules from the adapter's `implementer-overlay-essential.md` that apply to this specific task (e.g., "Cleanup all effects in useEffect return function" for a component with side effects, or "Use `raise ... from e` to preserve exception chains" for error handling code). This makes the brief self-contained and targeted — the implementer does not need to scan the full overlay.
 7. **Verification**: How to know the task is done correctly — use the stack-specific build and test commands: `python3 .claude/scripts/<stack>/build.py` and `python3 .claude/scripts/<stack>/test.py`
+8. **For exact-string edit tasks** (mechanical tasks where you are supplying exact before/after
+   strings at character level): include two additional items in the brief:
+   - **Target line range**: `lines N–M` so the implementer can use `Read(offset=N, limit=5)`
+     instead of ingesting the full file to locate the target. Without this, Haiku reads the
+     entire file — a 27K-char test file costs ~7K tokens just to find a 3-line edit target.
+   - **TRUST THE BRIEF note** (append at the end of the brief):
+     > "The before/after strings above were copied directly from the file at HEAD — do not
+     > re-read the file to verify. If you need surrounding context, use
+     > `Read(offset=N, limit=10)` scoped to the line range above."
+
+   This addresses the triple-read pattern: 1a reads the file to draft the strings, 1b reads
+   it to confirm them, and the implementer reads it again to locate them. The line range
+   makes the implementer's read a 10-line targeted fetch instead of a full-file ingest.
 
 **Critical rule**: A context brief must be *self-contained*. Haiku should never need to read another task's brief to execute this one. If task B depends on task A's output, task B's brief must include the relevant interface/contract inline, not "see task A."
 

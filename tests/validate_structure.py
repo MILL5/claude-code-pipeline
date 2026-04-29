@@ -776,6 +776,37 @@ def check_orchestrate_workflow_optimizations(result: ValidationResult) -> None:
         result.fail("Orchestrate missing background token analysis documentation")
 
 
+def check_orchestrate_micro_plan_haiku_review(result: ValidationResult) -> None:
+    """Step 2.1 must document micro-plan Haiku reviewer policy (M3 — issue #39).
+
+    The review-cost ratio of 5.0x on micro-plans is structural: each Haiku implementation
+    task is ~$0.003 vs. each Sonnet review at ~$0.046. Cost-proportional review on
+    single-wave plans with <3KB briefs uses Haiku first-pass with Sonnet escalation on
+    FAIL (~60% review-cost savings on micro-plans).
+    """
+    orchestrate_path = PIPELINE_ROOT / "skills" / "orchestrate" / "SKILL.md"
+    if not orchestrate_path.exists():
+        return
+
+    content = orchestrate_path.read_text()
+
+    if "Micro-plan exception" in content and "Haiku" in content:
+        result.ok("Orchestrate Step 2.1 documents micro-plan Haiku review escalation")
+    else:
+        result.fail(
+            "Orchestrate Step 2.1 missing 'Micro-plan exception' Haiku reviewer policy "
+            "(M3 mitigation for issue #39)"
+        )
+
+    if "haiku→sonnet review escalation" in content:
+        result.ok("Orchestrate Step 2.1 documents haiku→sonnet review escalation note")
+    else:
+        result.fail(
+            "Orchestrate Step 2.1 missing 'haiku→sonnet review escalation' notes string "
+            "(M3 mitigation for issue #39)"
+        )
+
+
 def check_orchestrate_no_full_orchestrator_fallback(result: ValidationResult) -> None:
     """Step 0.7 must not paste the full ORCHESTRATOR.md as a fallback (M2 — issue #39).
 
@@ -1130,6 +1161,7 @@ def run_all_checks(verbose: bool = False) -> ValidationResult:
         ("Orchestrate local overlay loading", check_orchestrate_local_overlay_loading),
         ("Workflow optimizations", check_orchestrate_workflow_optimizations),
         ("ORCHESTRATOR.md no full-file fallback (M2)", check_orchestrate_no_full_orchestrator_fallback),
+        ("Micro-plan Haiku review (M3)", check_orchestrate_micro_plan_haiku_review),
         ("Agent frontmatter", check_agent_frontmatter),
         ("Skill frontmatter", check_skill_frontmatter),
         ("Cross-references", check_cross_references),

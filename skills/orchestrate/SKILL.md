@@ -620,6 +620,18 @@ would dilute Haiku's signal-to-noise ratio.
 To reduce repeated context, reuse a single code-reviewer agent within each wave via
 **SendMessage** instead of launching a fresh agent per task.
 
+**Reviewer model selection (cost-proportional):**
+- **Default:** Sonnet for the wave reviewer.
+- **Micro-plan exception:** When the plan has only one wave AND every brief in that wave
+  is <3KB, launch the wave reviewer on **Haiku** for the first pass (syntax + type +
+  contract check). If Haiku returns PASS, accept. If Haiku returns FAIL, escalate the
+  same review to Sonnet by relaunching a fresh code-reviewer agent on Sonnet with the
+  same change set (do not reuse the Haiku agent — its judgment differs in calibration).
+  Record the Haiku review with `is_escalation: false`, the Sonnet re-review with
+  `is_escalation: true` and `notes: "haiku→sonnet review escalation"`.
+- **Multi-wave plans:** Sonnet for the final wave; Haiku for non-final waves with the
+  same Haiku→Sonnet escalation rule on FAIL.
+
 **First review in a wave** — determine which stacks appear in the wave's tasks, then
 launch a new code-reviewer agent with those stacks' reviewer overlays:
 

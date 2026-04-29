@@ -58,10 +58,21 @@ Flag deviations only against the appropriate baseline.
 fixed Sonnet-tier overhead (1a spec, 1b plan, 1.5 draft-PR setup, plus one reviewer per wave)
 dominates the run. On a 2-task micro-plan this overhead is typically ~$0.40 — more than any
 plausible Haiku spend. The 70/20/10 target is structurally unreachable regardless of planner
-quality. **In this case, do not flag model-distribution deviations at all**; instead include a
-one-line note: *"Small plan (N tasks): fixed overhead dominates — 70/20/10 not evaluable."*
-Continue to compute and report the distribution for visibility, but skip the 15pp-deviation
-gate for all three models.
+quality. In this case, suppress the following gates and replace them all with a single one-line
+note: *"Small plan (N tasks): fixed overhead dominates — model-distribution, review-ratio,
+step-anomaly, and hidden-consumption gates suppressed."*
+
+Gates suppressed for small plans (< 4 tasks):
+- **Section 2** — model-distribution 15pp-deviation gate (all three models)
+- **Section 5** — review-cost-ratio > 0.5 gate
+- **Section 6** — the two structural step-token anomalies: "Step 1a > Step 2 tokens" and
+  "Step 1b output > implementer output combined" (other Section 6 anomalies — single agent
+  > 30% of total, Haiku output > 5K, total cost > $5 — are real quality signals and are
+  **not** suppressed)
+- **Section 7** — aggregate file-read overhead > 30% gate
+
+Continue to compute and report all distributions and ratios for visibility; the suppression
+only prevents these from tripping the filing threshold and generating findings.
 
 Compute each model's share as: `model_cost / total_cost × 100`. Report BOTH cost-weighted
 percentages AND call-count percentages — but flag deviations based on the cost metric only.
@@ -100,14 +111,15 @@ Evaluate pipeline execution characteristics:
   planning > 100% of implementation is expected (dependency verification before deletes IS
   the value of Step 1a) — use 100% as the flag threshold.
 - **Review cost ratio**: total review + fix tokens vs. implementation tokens. A ratio > 0.5
-  suggests implementations are frequently failing review — possible quality issue in context briefs
+  suggests implementations are frequently failing review — possible quality issue in context briefs.
+  *(skip for small plans — see Section 2 small-plan adjustment)*
 
 ### 6. Anomaly Detection
 
 Flag any of these anomalies:
 - A single agent call consuming > 30% of the total pipeline tokens
-- Step 1a (clarification) consuming more tokens than Step 2 (implementation)
-- Step 1b (planning) output tokens exceeding all implementer output tokens combined
+- Step 1a (clarification) consuming more tokens than Step 2 (implementation) *(skip for small plans)*
+- Step 1b (planning) output tokens exceeding all implementer output tokens combined *(skip for small plans)*
 - Any Haiku agent call with output > 5,000 tokens (Haiku should produce < 150 lines)
 - Total pipeline cost exceeding $5.00 for a single feature
 
@@ -127,6 +139,7 @@ invisible to the orchestrator's prompt-level tracking:
 - **Aggregate file-read overhead**: Sum the chars across all `files_read` entries in the
   ledger. If this exceeds 30% of total orchestrator-tracked input chars, flag as a finding —
   agents are spending heavily on disk I/O that the planner could potentially inline.
+  *(skip for small plans — see Section 2 small-plan adjustment)*
 
 Note: Earlier versions of this skill compared `agent_input_self` to orchestrator-tracked
 `input_chars` to compute a "hidden consumption delta." Self-assessed agent input was
@@ -212,12 +225,12 @@ To classify by type, parse the agent's first output line:
 ## Significance Threshold
 
 Only file a GitHub issue if **at least ONE** of these conditions is met:
-- Model distribution deviates > 15 percentage points from the 70/20/10 target on any model (suppressed for small plans — see "Small-plan adjustment" above)
+- Model distribution deviates > 15 percentage points from the 70/20/10 target on any model *(suppressed for small plans)*
 - Total escalation + retry cost exceeds 25% of total pipeline cost
-- Any anomaly from Section 6 is detected
+- Any anomaly from Section 6 is detected *(structural step-anomalies suppressed for small plans — see Section 2)*
 - 3 or more prompt efficiency flags from Section 3
-- Review cost ratio > 0.5 from Section 5
-- Aggregate file-read overhead exceeds 30% of orchestrator-tracked input (Section 7)
+- Review cost ratio > 0.5 from Section 5 *(suppressed for small plans)*
+- Aggregate file-read overhead exceeds 30% of orchestrator-tracked input (Section 7) *(suppressed for small plans)*
 - 3+ outputs exceed the soft cap, OR any output exceeds the hard cap (Section 8)
 - Fixed orchestrator overhead exceeds 25,000 tokens (Section 8a)
 

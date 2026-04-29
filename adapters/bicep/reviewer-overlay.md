@@ -85,3 +85,21 @@
 - Clean module boundaries with typed interfaces
 - Comprehensive tagging on all resources
 - Security-first: managed identity, Key Vault, private endpoints, encryption
+
+## Simplification Heuristics
+
+- Hand-rolled `for` loop building a derived array → `map()` / `filter()` /
+  `reduce()` ARM functions
+- Multiple parameters that are always passed together → consolidated
+  parameter object with typed properties
+- Inline resource definition repeated 2+ times with parameter variation →
+  module reuse
+- `concat('a', 'b', 'c')` of literals → string interpolation `'abc'` (or
+  `'${var}suffix'`)
+- `if (condition) { resource1 } else { resource2 }` where only one shared
+  property differs → single resource with conditional property
+- `length(array) == 0` → `empty(array)`
+- `dependsOn` listing resources Bicep can already infer from references →
+  drop the explicit list
+- Output that is a literal of an input parameter → drop the output (caller
+  already has the value)

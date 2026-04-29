@@ -69,3 +69,17 @@
 - Clean, maintainable, well-documented code
 - Testable architecture (dependency injection where possible)
 - Simple, focused solutions (no over-engineering)
+
+## Simplification Heuristics
+
+- Closure-arg call → trailing closure when it improves readability
+- `guard let x = x else { return }` → optional chaining (`x?.method()`) when no
+  control flow other than early return depends on the unwrap
+- `for` loop building a new collection → `.map` / `.compactMap` / `.filter`
+- Stored property with custom getter only → computed property
+- `if let _ = optional` discarding the bound value → `if optional != nil`
+- `array.count == 0` → `array.isEmpty`
+- `String` interpolation of `String(describing:)` on a known type →
+  direct interpolation
+- Manual `Result<T, Error>` plumbing through `do/try/catch` that just
+  re-throws → `try` directly

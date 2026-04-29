@@ -1075,6 +1075,28 @@ def check_fix_defects_skill(result: ValidationResult) -> None:
         result.fail("fix-defects missing PR comment reply mechanism")
 
 
+def check_reviewer_simplification_heuristics(result: ValidationResult) -> None:
+    """Each adapter and cross-cutting overlay reviewer-overlay.md must document
+    the Simplification Heuristics section that backs the [simplify] tag."""
+    marker = "## Simplification Heuristics"
+    targets = [
+        ("adapters", a) for a in ADAPTERS
+    ] + [
+        ("overlays", o) for o in OVERLAYS
+    ]
+    for kind, name in targets:
+        path = PIPELINE_ROOT / kind / name / "reviewer-overlay.md"
+        if not path.exists():
+            continue  # already caught by completeness check
+        if marker in path.read_text():
+            result.ok(f"{kind}/{name}: reviewer-overlay.md has Simplification Heuristics section")
+        else:
+            result.fail(
+                f"{kind}/{name}: reviewer-overlay.md missing '{marker}' section "
+                f"(required for the [simplify] tag — see agents/code-reviewer-agent.md)"
+            )
+
+
 def check_overlay_completeness(result: ValidationResult) -> None:
     """Check each overlay has all required files."""
     for overlay in OVERLAYS:
@@ -1243,6 +1265,7 @@ def run_all_checks(verbose: bool = False) -> ValidationResult:
         ("Implementer contract references", check_implementer_contract_references),
         ("Reviewer no Standalone Mode", check_reviewer_no_standalone_mode),
         ("Reviewer OPTIONAL IMPROVEMENTS cap", check_reviewer_optional_cap),
+        ("Reviewer Simplification Heuristics sections", check_reviewer_simplification_heuristics),
         ("Clarification round caps", check_clarification_round_caps),
         ("Token-analysis output baselines", check_token_analysis_output_baselines),
         ("Token-analysis fixed overhead", check_token_analysis_fixed_overhead),

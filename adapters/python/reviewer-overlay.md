@@ -90,3 +90,19 @@
 - Clean, maintainable, well-typed code
 - Testable architecture with dependency injection
 - Simple, focused solutions (no over-engineering)
+
+## Simplification Heuristics
+
+- `list(map(f, xs))` / `list(filter(p, xs))` → list/dict/set comprehension
+- Class that's just typed fields with `__init__` → `@dataclass`
+- `"text " + str(x) + " more"` / `"text {}".format(x)` → f-string
+- Manual file open/close around `try/finally` → `with open(...) as f:`
+- Walrus operator (`:=`) when it removes a duplicated read or pre-binding
+  line in a comprehension/while
+- `for k in d.keys():` → `for k in d:`
+- `if x in [a, b, c]:` (small literal set) → `if x in {a, b, c}:`
+- Manual `dict.get(k, default)` then `is None` check → just `dict.get(k, default)`
+  when the default is the desired value
+- `len(seq) == 0` → `not seq` (when truthiness semantics match)
+- Hand-rolled `@property` returning a stored attribute with no logic →
+  plain attribute

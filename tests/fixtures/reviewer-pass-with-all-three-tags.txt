@@ -1,0 +1,9 @@
+PASS
+[should-fix] Duplicated validation logic across divide() and modulo() — extract a shared guard helper
+[nice-to-have] Error messages could include the offending value for easier debugging
+[simplify] src/calculator.py:42 — manual loop summing list → sum(values): builtin matches loop semantics for numeric iterables
+
+---TOKEN_REPORT---
+FILES_READ: src/calculator.py ~520; tests/test_calculator.py ~1100
+TOOL_CALLS: Read=3 Grep=1
+---END_TOKEN_REPORT---

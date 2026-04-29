@@ -85,3 +85,22 @@
 - Clean, maintainable, well-documented code
 - Testable architecture (dependency injection via props/context)
 - Simple, focused solutions (no over-engineering)
+
+## Simplification Heuristics
+
+- Same `useEffect` body in 2+ components with identical deps → custom hook
+- Re-derived value computed every render → `useMemo` (only when dep stability
+  is obvious; otherwise leave alone)
+- `<React.Fragment>` with no key → `<>` shorthand
+- `<div>` wrapping a single child only to satisfy a single-root rule →
+  fragment
+- Manual prop forwarding of every prop → `{...props}` spread when the
+  component is genuinely a wrapper
+- `useState(false)` + setter for a derived boolean → derive from existing
+  state inline
+- `array.map(x => x)` identity → `array` directly
+- Conditional className built from `+` concatenation with spaces →
+  template literal
+- Inline arrow function in render that doesn't capture render-scoped state
+  → defined outside the component (only when stability matters for memoized
+  children)

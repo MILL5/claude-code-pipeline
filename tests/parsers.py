@@ -64,13 +64,13 @@ def parse_implementer_result(output: str) -> dict:
 
 
 def _parse_optional_entry(raw: str) -> dict:
-    """Split a `[should-fix] ...` / `[nice-to-have] ...` prefix from free text.
+    """Split a `[should-fix] ...` / `[nice-to-have] ...` / `[simplify] ...` prefix from free text.
 
-    Returns {"text": str, "tag": "should-fix"|"nice-to-have"|None}. Entries
-    without a known tag get tag=None for backward compatibility.
+    Returns {"text": str, "tag": "should-fix"|"nice-to-have"|"simplify"|None}.
+    Entries without a known tag get tag=None for backward compatibility.
     """
     s = raw.strip()
-    for tag in ("should-fix", "nice-to-have"):
+    for tag in ("should-fix", "nice-to-have", "simplify"):
         prefix = f"[{tag}]"
         if s.startswith(prefix):
             return {"text": s[len(prefix):].strip(), "tag": tag}

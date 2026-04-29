@@ -702,10 +702,10 @@ agent for tasks 9+. This prevents context window saturation from accumulated rev
 - If `FAIL`: proceed to Step 2.2 (fix)
 
 **Backlog classification:** after handling PASS/FAIL, parse the
-`--- OPTIONAL IMPROVEMENTS ---` section. Each entry is tagged `[should-fix]` or
-`[nice-to-have]`. For each, apply the fold-vs-defer rule in the Backlog
-Integration section below. This happens after the pass/fail handshake — do not
-let it block the review cycle.
+`--- OPTIONAL IMPROVEMENTS ---` section. Each entry is tagged `[should-fix]`,
+`[nice-to-have]`, or `[simplify]`. For each, apply the fold-vs-defer rule in
+the Backlog Integration section below. This happens after the pass/fail
+handshake — do not let it block the review cycle.
 
 **Token tracking:** Record a `TOKEN_LEDGER` entry for each review (step `2.1:<task_id>`). Agent: `code-reviewer-agent`, model: `sonnet` or `haiku` per the micro-plan rule above. For SendMessage reviews, `input_chars` is the SendMessage content (not the full accumulated context).
 
@@ -1129,8 +1129,29 @@ Use the planner's existing Haiku/Sonnet classification rubric
 - **Sonnet/Opus-tier** — design decisions, multi-file, moderate-to-high reasoning
   → **defer** (file to backlog).
 
-Reviewer guidance: `[should-fix]` entries with Haiku-tier fix are fold
-candidates; `[nice-to-have]` entries default-defer regardless of tier.
+Reviewer guidance:
+- `[should-fix]` entries with Haiku-tier fix are fold candidates.
+- `[nice-to-have]` entries default-defer regardless of tier.
+- `[simplify]` entries are fold candidates by definition (Haiku-tier,
+  single-file, behavior-preserving). The reviewer self-attests behavior
+  preservation; the **build + test gate is the enforcement**. Two safety
+  guards apply:
+  1. **Haiku-reviewer guard:** if the reviewer that emitted the entry was
+     Haiku (micro-plan reviewer per the M3 cost-proportional rule), force
+     the entry to **defer** instead of fold. Haiku judgment on behavior
+     preservation is not yet trusted enough to auto-apply in-run.
+  2. **Abandon-on-failure:** when the spawned simplify implementer
+     returns `FAILURE` (build or test failed), do **NOT** enter the
+     standard Step 2.2 fix loop. Discard the simplify worktree, log
+     `action: simplify_abandoned` with reasoning `"tests/build failed —
+     original code retained"`, and continue. The premise of `[simplify]`
+     is behavior preservation; if tests fail, the rewrite is wrong, and
+     the original code is correct by construction.
+
+`[simplify]` empty-diff path: if the implementer cannot find a
+behavior-preserving rewrite, it returns `SUCCESS` with no diff and a
+one-line note. Skip the empty commit and log
+`action: simplify_no_change`.
 
 ### Run-Level Fold Cap
 
@@ -1184,7 +1205,7 @@ backlog_decisions:
   - phase: reviewer              # planner | reviewer | implementer | token-analysis
     title: "Extract common Grok error mapper"
     classification: sonnet       # haiku | sonnet | opus | trivial
-    action: deferred             # folded | deferred | skipped | failed
+    action: deferred             # folded | deferred | skipped | failed | simplify_abandoned | simplify_no_change
     issue_url: "https://github.com/.../issues/42"   # present when action=deferred
     issue_number: 42
     reasoning: "Cross-cuts 4 files, adds new abstraction — Sonnet-tier"
@@ -1215,8 +1236,11 @@ PR). If no folds occurred, omit the section entirely.
 
 - **Step 1b (planner)**: planner outputs a `Deferred Items` section. Orchestrator
   iterates each, classifies, folds or files per the rule above.
-- **Step 2.1 (reviewer)**: each `[should-fix]` / `[nice-to-have]` entry in
-  OPTIONAL IMPROVEMENTS is classified. Orchestrator folds or files.
+- **Step 2.1 (reviewer)**: each `[should-fix]` / `[nice-to-have]` /
+  `[simplify]` entry in OPTIONAL IMPROVEMENTS is classified. Orchestrator
+  folds or files. `[simplify]` entries from a Haiku reviewer always defer
+  (option B safety guard); folded `[simplify]` tasks abandon on test
+  failure rather than entering the fix loop.
 - **Step 2 (implementer)**: implementer's SUCCESS commit message may include a
   "Follow-up" suggestion line — surface to reviewer, who classifies it with the
   rest.

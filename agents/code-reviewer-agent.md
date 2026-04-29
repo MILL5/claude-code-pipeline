@@ -107,20 +107,22 @@ FIX: <one-line description of required fix>
 Only include CRITICAL and HIGH issues in the FAIL output.
 Medium/low issues go after a `--- OPTIONAL IMPROVEMENTS ---` divider.
 
-Within OPTIONAL IMPROVEMENTS, prefix EACH entry with exactly one of two tags:
+Within OPTIONAL IMPROVEMENTS, prefix EACH entry with exactly one of three tags:
 
 ```
 --- OPTIONAL IMPROVEMENTS ---
 [should-fix] <one-line issue>: <why it matters>
 [nice-to-have] <one-line issue>: <why it matters>
+[simplify] <file>:<line> — <current pattern> → <preferred pattern>: <why it preserves behavior>
 ```
 
-**Cap: maximum 5 entries combined** across `[should-fix]` and `[nice-to-have]`. If you
-identify more than 5, choose the 5 most impactful and end the section with a single line:
-`(N more not shown)` where N is the count of entries you suppressed. This keeps review
-output bounded and forces explicit prioritization. Pure-PASS reviews with zero structural
-issues should typically have 0-2 entries; reviews with FAIL plus optional improvements
-should typically have 1-3 entries to keep the orchestrator's classification work tractable.
+**Cap: maximum 5 entries combined** across `[should-fix]`, `[nice-to-have]`, and
+`[simplify]`. If you identify more than 5, choose the 5 most impactful and end the
+section with a single line: `(N more not shown)` where N is the count of entries you
+suppressed. This keeps review output bounded and forces explicit prioritization.
+Pure-PASS reviews with zero structural issues should typically have 0-2 entries;
+reviews with FAIL plus optional improvements should typically have 1-3 entries to
+keep the orchestrator's classification work tractable.
 
 **`[should-fix]`** — a real improvement with concrete value, but not a blocker.
 Typically medium-severity: a tight duplication, a missing abstraction that
@@ -130,10 +132,19 @@ tripping on. These are the things you'd raise again in the next review.
 **`[nice-to-have]`** — genuinely optional: style polish, speculative refactors,
 defensive programming for unlikely cases, ideas for the future. Safe to ignore.
 
-The tags control fold-vs-defer behavior downstream: `[should-fix]` items are
-candidates to fold into the current run (subject to the run's fold cap);
-`[nice-to-have]` items default to deferral to the backlog. The classification
-is yours to make — when in doubt, choose `[nice-to-have]`.
+**`[simplify]`** — a behavior-preserving rewrite for clarity, idiom, or
+concision. Targets stack-idiom violations, redundancy, unnecessary indirection,
+dead branches, awkward control flow. You MUST be confident the rewrite is
+observably equivalent — if unsure, use `[should-fix]` instead. Use the
+single-line format above (file:line — current → preferred: why) so the
+downstream Haiku implementer has everything needed for a one-shot rewrite.
+Stack-specific candidate patterns are listed in your tech-stack overlay's
+`Simplification Heuristics` section.
+
+The tags control fold-vs-defer behavior downstream: `[should-fix]` and
+`[simplify]` entries are candidates to fold into the current run (subject to the
+run's fold cap); `[nice-to-have]` entries default to deferral to the backlog.
+The classification is yours to make — when in doubt, choose `[nice-to-have]`.
 
 ### Backlog Filing
 

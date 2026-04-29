@@ -484,6 +484,40 @@ def check_token_analysis_fixed_overhead(result: ValidationResult) -> None:
         result.ok("token-analysis documents fixed orchestrator overhead (E2)")
 
 
+def check_token_analysis_small_plan_gates(result: ValidationResult) -> None:
+    """Token-analysis must suppress structural false-positive gates for small plans."""
+    path = PIPELINE_ROOT / "skills" / "token-analysis" / "SKILL.md"
+    if not path.exists():
+        return
+
+    content = path.read_text()
+
+    # Threshold must be documented
+    if "fewer than 4 implementation tasks" in content:
+        result.ok("token-analysis documents small-plan threshold (< 4 tasks)")
+    else:
+        result.fail("token-analysis missing small-plan threshold (< 4 tasks)")
+
+    # All four suppressed gate categories must be listed in the small-plan block
+    gate_checks = [
+        ("model-distribution", "model-distribution"),
+        ("review-cost ratio", "review-cost"),
+        ("step-token anomalies", "step-anomaly"),
+        ("hidden-consumption", "hidden-consumption"),
+    ]
+    for label, keyword in gate_checks:
+        if keyword in content:
+            result.ok(f"token-analysis small-plan suppresses {label} gate")
+        else:
+            result.fail(f"token-analysis missing small-plan suppression for {label} gate")
+
+    # Skip annotations must appear inside Sections 5, 6, and 7
+    if content.lower().count("skip for small plans") >= 3:
+        result.ok("token-analysis has skip-note annotations in Sections 5, 6, and 7")
+    else:
+        result.fail("token-analysis missing skip-note annotations in gate sections (need >=3)")
+
+
 def check_clarification_round_caps(result: ValidationResult) -> None:
     """Architect skills must cap clarification round output to bound input bloat (B5)."""
     for skill_path in [
@@ -750,6 +784,30 @@ def check_orchestrate_workflow_optimizations(result: ValidationResult) -> None:
         result.ok("Orchestrate documents background token analysis")
     else:
         result.fail("Orchestrate missing background token analysis documentation")
+
+    # Step 1.4: pre-flight build verification before Wave 1
+    if "pre-flight build" in content.lower() or "PRE-FLIGHT BUILD" in content:
+        result.ok("Orchestrate documents Step 1.4 pre-flight build verification")
+    else:
+        result.fail("Orchestrate missing Step 1.4 pre-flight build verification")
+
+    # Step 1.4: Wave 0 injection option for pre-existing build failures
+    if "inject Wave 0" in content or "inject wave 0" in content.lower():
+        result.ok("Orchestrate documents Wave 0 injection for pre-existing build failures")
+    else:
+        result.fail("Orchestrate missing Wave 0 injection option for pre-flight build failure")
+
+    # Step 2.1: micro-plan Haiku reviewer optimization
+    if "micro-plan rule" in content.lower():
+        result.ok("Orchestrate documents micro-plan Haiku reviewer optimization (Step 2.1)")
+    else:
+        result.fail("Orchestrate missing micro-plan Haiku reviewer optimization (Step 2.1)")
+
+    # Step 3.4: chrome UI test ToolSearch availability probe
+    if "ToolSearch" in content and "browser-ui" in content:
+        result.ok("Orchestrate documents chrome UI test ToolSearch probe (Step 3.4)")
+    else:
+        result.fail("Orchestrate missing chrome UI test ToolSearch probe (Step 3.4)")
 
 
 def check_agent_frontmatter(result: ValidationResult) -> None:
@@ -1063,6 +1121,7 @@ def run_all_checks(verbose: bool = False) -> ValidationResult:
         ("Clarification round caps", check_clarification_round_caps),
         ("Token-analysis output baselines", check_token_analysis_output_baselines),
         ("Token-analysis fixed overhead", check_token_analysis_fixed_overhead),
+        ("Token-analysis small-plan gates", check_token_analysis_small_plan_gates),
         ("Planner PLAN_WRITTEN stub", check_planner_plan_stub),
         ("Orchestrate reads plan from disk", check_orchestrate_reads_plan_from_disk),
         ("ORCHESTRATOR.md template sections", check_orchestrator_template_sections),

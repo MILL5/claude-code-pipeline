@@ -757,12 +757,35 @@ Loading all stacks' overlays would dilute Haiku's signal-to-noise ratio and wast
 To reduce repeated context, reuse a single code-reviewer agent within each wave via
 **SendMessage** instead of launching a fresh agent per task.
 
+**Reviewer model selection:** Default to **Sonnet**. Use **Haiku** only when ALL of
+these conditions hold:
+
+1. The plan contains exactly **one wave** (read the wave count from `1b-plan.md` — not
+   just "this is the first wave", but "there is only one wave total").
+2. Every task brief in the plan is **< 3,000 chars** (check the `TASK CONTEXT BRIEF`
+   field for each task in `1b-plan.md`).
+3. This is the **initial review pass** for the wave — not a re-review after a fix
+   (Step 2.2 re-reviews always use Sonnet regardless of plan size).
+
+**Why:** On a single-wave micro-plan with small briefs, Sonnet reviewer cost
+(~$0.046/call) is 10–15× the Haiku implementer cost (~$0.003/call). A Haiku reviewer
+catching syntax, type, and obvious logic errors brings the ratio back toward parity.
+The Sonnet reviewer remains available for escalation if Haiku returns FAIL: the
+Step 2.2 fix cycle always re-reviews with Sonnet (see below), so quality is not
+sacrificed — the Haiku pass just filters the easy cases cheaply.
+
+If the Haiku reviewer returns FAIL, route to Step 2.2 as normal. The re-review after
+the fix (Step 2.2 completion) uses Sonnet unconditionally.
+
+**Token tracking note:** When Haiku is selected, record `model: haiku` in the
+TOKEN_LEDGER entry for this review (step `2.1:<task_id>`).
+
 **First review in a wave** — determine which stacks appear in the wave's tasks, then
 launch a new code-reviewer agent with those stacks' reviewer overlays:
 
 ```
 Agent: code-reviewer-agent
-Model: sonnet
+Model: <sonnet (default) or haiku (micro-plan rule above)>
 Prompt: |
   You are being launched by the orchestration pipeline.
   Use the PASS/FAIL output protocol from your agent definition.
@@ -812,7 +835,7 @@ agent for tasks 9+. This prevents context window saturation from accumulated rev
 Integration section below. This happens after the pass/fail handshake — do not
 let it block the review cycle.
 
-**Token tracking:** Record a `TOKEN_LEDGER` entry for each review (step `2.1:<task_id>`). Agent: `code-reviewer-agent`, model: `sonnet`. For SendMessage reviews, `input_chars` is the SendMessage content (not the full accumulated context).
+**Token tracking:** Record a `TOKEN_LEDGER` entry for each review (step `2.1:<task_id>`). Agent: `code-reviewer-agent`, model: `sonnet` or `haiku` per the micro-plan rule above. For SendMessage reviews, `input_chars` is the SendMessage content (not the full accumulated context).
 
 ### Step 2.2: FIX
 

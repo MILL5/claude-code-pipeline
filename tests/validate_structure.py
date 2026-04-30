@@ -670,6 +670,41 @@ def check_planner_exact_string_brief_hints(result: ValidationResult) -> None:
         result.fail("Planner missing TRUST THE BRIEF note for exact-string edit briefs")
 
 
+def check_planner_small_edit_brief_mode(result: ValidationResult) -> None:
+    """Planner must document small-edit brief mode targeting ~4K chars (#59 Finding 1).
+
+    Issue #59 traced 38-53K-token implementer prompts to verbose briefs on small edits.
+    The fix is a documented "Small-edit brief mode" with a ~4K-char target, inline-diff
+    guidance for edits, skeleton-with-comments for creates, and a 2-item FORBIDDEN cap.
+    This check ensures those guardrails stay in the planner.
+    """
+    path = PIPELINE_ROOT / "skills" / "architect-planner" / "SKILL.md"
+    if not path.exists():
+        return
+
+    content = path.read_text()
+
+    if "Small-edit brief mode" in content:
+        result.ok("Planner documents small-edit brief mode")
+    else:
+        result.fail("Planner missing small-edit brief mode section (#59 Finding 1)")
+
+    if "4,000 character" in content or "~4K chars" in content or "4K characters" in content:
+        result.ok("Planner documents ~4K-char target for small-edit briefs")
+    else:
+        result.fail("Planner missing ~4K-char target for small-edit briefs (#59)")
+
+    if "nline diff" in content:  # matches "Inline diffs"/"inline diffs"
+        result.ok("Planner documents inline-diff guidance for small edits")
+    else:
+        result.fail("Planner missing inline-diff guidance for small edits (#59)")
+
+    if "Skeleton-with-comments" in content or "skeleton-with-comments" in content or "skeleton with comments" in content.lower():
+        result.ok("Planner documents skeleton-with-comments guidance for new-file creates")
+    else:
+        result.fail("Planner missing skeleton-with-comments guidance for new-file creates (#59)")
+
+
 def check_orchestrate_reads_plan_from_disk(result: ValidationResult) -> None:
     """Orchestrate must read 1b-plan.md from disk, not from agent output."""
     orchestrate_path = PIPELINE_ROOT / "skills" / "orchestrate" / "SKILL.md"
@@ -1310,6 +1345,7 @@ def run_all_checks(verbose: bool = False) -> ValidationResult:
         ("Token-analysis small-plan gates", check_token_analysis_small_plan_gates),
         ("Planner PLAN_WRITTEN stub", check_planner_plan_stub),
         ("Planner exact-string brief hints", check_planner_exact_string_brief_hints),
+        ("Planner small-edit brief mode (#59)", check_planner_small_edit_brief_mode),
         ("Orchestrate reads plan from disk", check_orchestrate_reads_plan_from_disk),
         ("ORCHESTRATOR.md template sections", check_orchestrator_template_sections),
         ("Extract profile headers", check_extract_profile_headers),

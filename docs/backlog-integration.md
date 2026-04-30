@@ -5,6 +5,7 @@ Backlog integration captures out-of-scope work surfaced during `/orchestrate` ru
 ## Fold vs. defer at a glance
 
 ```mermaid
+%%{init: {'flowchart': {'wrappingWidth': 280}}}%%
 flowchart TD
     Source["Out-of-scope item surfaced by:<br/>• Reviewer (OPTIONAL IMPROVEMENTS, tagged)<br/>• Planner (Deferred Items)<br/>• Implementer (Follow-up suggestion)<br/>• Token analysis (always defers)"]
     Source --> Classify{Haiku-tier?<br/>single-file<br/>mechanical<br/>fully-specified}

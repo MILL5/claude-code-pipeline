@@ -263,6 +263,43 @@ def check_essential_overlay_size(result: ValidationResult) -> None:
             )
 
 
+# Rules that have been lifted from test-overlay.md into implementer overlays
+# to prevent Haiku cargo-culting library-auto-handled patterns. Each entry
+# asserts that the distinctive identifier still appears in the implementer
+# essential overlay AND the full overlay for the named adapter. See issue #52.
+#
+# Format: (adapter, identifier, source-issue, description)
+LIFTED_RULES: list[tuple[str, str, str, str]] = [
+    ("react", "`cleanup()`", "#50/#51", "RTL auto-registers afterEach(cleanup)"),
+    ("react", "`act()`", "#52", "RTL helpers already wrap act() internally"),
+    ("react", "container.querySelector", "#52", "Use RTL accessibility queries instead"),
+]
+
+
+def check_lifted_rules_present(result: ValidationResult) -> None:
+    """Rules lifted into implementer overlays must remain there (drift guard).
+
+    Once a cargo-cult-prevention rule is lifted from test-overlay.md into the
+    implementer overlay, removing it would silently re-create the gap where the
+    test-architect sees the rule but the implementer that writes the test code
+    does not. This check enforces persistence in BOTH the essential variant
+    (Haiku reads it) and the full variant (Sonnet/Opus reads it). See issue #52.
+    """
+    for adapter, identifier, source, description in LIFTED_RULES:
+        for variant in ("implementer-overlay-essential.md", "implementer-overlay.md"):
+            path = PIPELINE_ROOT / "adapters" / adapter / variant
+            if not path.exists():
+                continue  # caught by completeness check
+            content = path.read_text()
+            if identifier in content:
+                result.ok(f"Adapter {adapter}: lifted rule '{identifier}' present in {variant}")
+            else:
+                result.fail(
+                    f"Adapter {adapter}: lifted rule '{identifier}' missing from {variant} "
+                    f"(source: {source} — {description}; do not silently revert lifts)"
+                )
+
+
 def check_essential_overlay_no_pipeline_protocol_rules(result: ValidationResult) -> None:
     """Essential overlays must not duplicate pipeline-protocol rules from agent definitions (C1).
 
@@ -1259,6 +1296,7 @@ def run_all_checks(verbose: bool = False) -> ValidationResult:
         ("Adapter completeness", check_adapter_completeness),
         ("Essential overlay size", check_essential_overlay_size),
         ("Essential overlay no pipeline-protocol rules", check_essential_overlay_no_pipeline_protocol_rules),
+        ("Lifted rules drift guard (#52)", check_lifted_rules_present),
         ("Agent injection markers", check_agent_markers),
         ("Agent output protocols", check_agent_protocols),
         ("TOKEN_REPORT consistency", check_token_report_consistency),

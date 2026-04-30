@@ -10,4 +10,4 @@
 - Stable, unique `key` props in lists — never array index for dynamic lists
 - Handle loading, error, and empty states explicitly in data-fetching components
 - `const` by default, `let` only for reassignment, never `var`
-- Do NOT import or call `cleanup()` in test files — `@testing-library/react` registers it automatically via `afterEach`
+- RTL tests (`@testing-library/react` auto-handles cleanup + `act()`): no `cleanup()`, no `act()` around RTL helpers, no `container.querySelector` — use `getByRole`/`getByLabelText`

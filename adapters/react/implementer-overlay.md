@@ -54,6 +54,10 @@ Within the boundaries of what the brief asks for, write clean React/TypeScript:
 - Lazy load heavy components with `React.lazy` and `Suspense`
 - Avoid unnecessary re-renders by lifting state to the appropriate level
 
+## Testing
+
+- Do NOT import or call `cleanup()` in test files — `@testing-library/react` registers it automatically via `afterEach`. Manual calls are dead code that the reviewer will reject.
+
 ## Project Conventions
 
 Key conventions for React/TypeScript projects (the context brief overrides these if different):

@@ -176,18 +176,30 @@ A context brief includes:
    - **Target line range**: `lines N–M` so the implementer can use `Read(offset=N, limit=5)`
      instead of ingesting the full file to locate the target. Without this, Haiku reads the
      entire file — a 27K-char test file costs ~7K tokens just to find a 3-line edit target.
-   - **TRUST THE BRIEF note** (append at the end of the brief):
-     > "The before/after strings above were copied directly from the file at HEAD — do not
-     > re-read the file to verify. If you need surrounding context, use
-     > `Read(offset=N, limit=10)` scoped to the line range above."
+   - **TRUST THE BRIEF note** (append at the end of the brief, exactly one sentence):
+     > "Strings copied from HEAD; do not re-read to verify. For surrounding context use `Read(offset=N, limit=10)` scoped to the line range above."
 
-   This addresses the triple-read pattern: 1a reads the file to draft the strings, 1b reads
-   it to confirm them, and the implementer reads it again to locate them. The line range
-   makes the implementer's read a 10-line targeted fetch instead of a full-file ingest.
+   This addresses the triple-read pattern (1a → 1b → implementer all reading the same file).
+   The line range makes the implementer's read a 10-line targeted fetch instead of a
+   full-file ingest.
 
 **Critical rule**: A context brief must be *self-contained*. Haiku should never need to read another task's brief to execute this one. If task B depends on task A's output, task B's brief must include the relevant interface/contract inline, not "see task A."
 
 **Why FORBIDDEN goes near the top**: Haiku tends to cargo-cult "solutions" it has seen in training and quietly ignore prohibitions buried at the bottom of a long brief. Stating them as `FORBIDDEN in this task:` right after the file list — before the agent has loaded up on output-spec momentum — materially improves adherence. Reserve this section for task-specific prohibitions only; generic stack rules belong in the implementer overlay.
+
+#### Small-edit brief mode (target ~4K chars)
+
+For tasks that change fewer than ~20 lines in a single file, OR create a single file with fewer than ~50 lines of generated content, write a compact brief that fits in ~4,000 characters (~1K tokens). Verbose briefs on small tasks waste 5-7x the implementer's input token budget — a 53K-token prompt for a 50-line YAML edit is the failure mode tracked in issue #59.
+
+For these tasks:
+
+- **Inline diffs over verbatim blocks.** When editing existing files, show only the changed lines plus 2-3 lines of surrounding context, not the full before/after of large sections. The implementer can `Read(offset=N, limit=10)` for more context if needed (combined with the line-range hint in #8 above).
+- **Skeleton-with-comments over full templates.** When creating a new file, write a 10-line skeleton with inline comments describing each section, not the full target file content. Haiku is good at expanding skeletons; pasting the full target turns the brief into a copy-paste exercise.
+- **FORBIDDEN cap of 2.** Keep to two task-specific risks. If you're tempted to list more, the rest belong in the implementer overlay (general stack rules) rather than the brief.
+- **One-sentence TRUST THE BRIEF.** For exact-string edits, use the condensed format from #8 above — never expand it back to a multi-line block.
+- **Skip background prose.** Do not explain why the change is part of a larger feature. The implementer does not need to choose between code paths based on motivation; if it does, the brief is under-specified for Haiku and should be split or escalated.
+
+The general Brief size gate (Decomposition Quality Checks below) flags briefs over 3K tokens for Haiku. Small-edit mode targets ~1K tokens, comfortably under the gate.
 
 ### Step 5: Assign Models, Stacks, and Estimate
 

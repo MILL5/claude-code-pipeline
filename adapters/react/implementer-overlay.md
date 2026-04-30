@@ -56,7 +56,11 @@ Within the boundaries of what the brief asks for, write clean React/TypeScript:
 
 ## Testing
 
-- Do NOT import or call `cleanup()` in test files — `@testing-library/react` registers it automatically via `afterEach`. Manual calls are dead code that the reviewer will reject.
+When writing tests with `@testing-library/react` (RTL), the library already handles common test-setup mechanics. Manual duplication is dead code that the reviewer will reject:
+
+- Do NOT import or call `cleanup()` in test files — RTL registers it automatically via `afterEach`.
+- Do NOT wrap RTL helpers (`render`, `userEvent`, `fireEvent`, `waitFor`, `findBy*`) in `act()` — they already wrap it internally. Manual `act()` is only needed for direct state mutations outside RTL.
+- Do NOT use `container.querySelector` to find elements — use RTL queries: `getByRole`, `getByLabelText`, `getByPlaceholderText`, `getByText`, falling back to `getByTestId` only when no accessible query works.
 
 ## Project Conventions
 

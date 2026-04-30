@@ -152,16 +152,18 @@ Then use any of these to trigger the pipeline:
 
 ## Available Adapters
 
-| Adapter | Auto-Detects | Build Tool | Test Framework | Coverage |
-|---------|-------------|------------|----------------|----------|
-| `swift-ios` | `*.xcodeproj`, `*.xcworkspace`, `Package.swift` | Xcode / Swift PM | XCTest | xccov |
-| `react` | `package.json` with `react` dependency | npm/yarn/pnpm/bun + tsc | Jest / Vitest | istanbul / v8 |
-| `python` | `pyproject.toml`, `setup.py`, `requirements.txt` | mypy + ruff | pytest | pytest-cov |
-| `flutter` | `pubspec.yaml` with `flutter:` | flutter analyze + dart format | flutter test (unit/widget/golden/integration) | lcov |
-| `android` | `build.gradle.kts`, `build.gradle` | Gradle (AGP) + Android lint | JUnit 4 + Robolectric / Espresso / Compose Testing | JaCoCo |
-| `bicep` | `*.bicep`, `bicepconfig.json` | bicep build + az bicep lint | ARM-TTK / PSRule / what-if | Resource validation coverage |
+| Adapter | Auto-Detects | Build Tool | Test Framework | Coverage | Adoption Guide |
+|---------|-------------|------------|----------------|----------|----------------|
+| `swift-ios` | `*.xcodeproj`, `*.xcworkspace`, `Package.swift` | Xcode / Swift PM | XCTest | xccov | [swift-ios.md](docs/adoption/swift-ios.md) |
+| `react` | `package.json` with `react` dependency | npm/yarn/pnpm/bun + tsc | Jest / Vitest | istanbul / v8 | [react.md](docs/adoption/react.md) |
+| `python` | `pyproject.toml`, `setup.py`, `requirements.txt` | mypy + ruff | pytest | pytest-cov | [python.md](docs/adoption/python.md) |
+| `flutter` | `pubspec.yaml` with `flutter:` | flutter analyze + dart format | flutter test (unit/widget/golden/integration) | lcov | [flutter.md](docs/adoption/flutter.md) |
+| `android` | `build.gradle.kts`, `build.gradle` | Gradle (AGP) + Android lint | JUnit 4 + Robolectric / Espresso / Compose Testing | JaCoCo | [android.md](docs/adoption/android.md) |
+| `bicep` | `*.bicep`, `bicepconfig.json` | bicep build + az bicep lint | ARM-TTK / PSRule / what-if | Resource validation coverage | [bicep.md](docs/adoption/bicep.md) |
 
-**Deploying to Azure?** See the **[Azure Deployment Guide](docs/azure-guide.md)** for Bicep adapter setup, Azure SDK overlay, authentication, and the 7 Azure-specific skills.
+Each adoption guide covers detection, required tools, bootstrap output, project layout assumptions, build/test commands, common pitfalls, and a worked first-`/orchestrate`-run example for that stack.
+
+**Deploying to Azure?** See the **[Azure Deployment Guide](docs/azure-guide.md)** for the full Bicep + Azure SDK overlay + authentication + skills walkthrough (more detailed than the bicep adoption guide).
 
 ### What Each Adapter Provides
 
@@ -444,7 +446,14 @@ claude-code-pipeline/
 |
 |-- docs/                                # Guides and documentation
 |   |-- azure-guide.md                  # Azure deployment guide (Bicep, SDK, auth, skills)
-|   +-- testing-guide.md                # Manual testing & defect reporting guide
+|   |-- testing-guide.md                # Manual testing & defect reporting guide
+|   +-- adoption/                       # Per-stack adoption guides (linked from README adapter table)
+|       |-- swift-ios.md
+|       |-- react.md
+|       |-- python.md
+|       |-- flutter.md
+|       |-- android.md
+|       +-- bicep.md
 |
 +-- templates/                           # Project file templates
     |-- CLAUDE.md.template               # Starting point for project CLAUDE.md

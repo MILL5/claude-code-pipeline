@@ -353,12 +353,9 @@ Prompt: |
   Do NOT enter plan mode — you will need to write the enriched spec file.
 
   TECH STACK CONTEXT:
-  <for each stack in STACK_REGISTRY, paste its architect-overlay.md under a
-   "## <Stack> Architecture Context" header>
-
-  <append cross-cutting overlays under "## Cross-Cutting: <name> Context" headers>
-
-  <append local overlays for the architect role per the Step 0.2 matrix; skip empty files>
+  <paste each STACK_REGISTRY stack's architect-overlay.md under "## <Stack> Architecture Context";
+   append cross-cutting overlays under "## Cross-Cutting: <name> Context";
+   append local overlays for the architect role per Step 0.2 matrix (skip empty)>
 
   STACK MAPPING (for awareness during analysis):
   <for each stack, list its stack_paths patterns, e.g.:
@@ -391,7 +388,7 @@ user's choice. If new topics, allow the round but cap cumulative 1a tokens at ~1
 (input + output across all 1a entries in `TOKEN_LEDGER`). On hitting the token cap,
 SendMessage `FINALIZE NOW` and force the agent to write the spec with current information.
 
-**Token tracking:** Record a `TOKEN_LEDGER` entry after the initial agent launch (step `1a`) and after each SendMessage round in the clarification loop (step `1a:clarify-N`). For each entry, measure the composed prompt as `input_chars` and the agent's response as `output_chars`. Agent: `architect-agent`, model: `sonnet`.
+**Token tracking:** Per Step 0.6 — record one entry for the initial launch (step `1a`) and one per clarification SendMessage (step `1a:clarify-N`). agent=`architect-agent`, model=`sonnet`.
 
 **TOKEN_LEDGER gate:** After Step 1a completes and `.claude/tmp/1a-spec.md` is written,
 verify that `TOKEN_LEDGER` contains at least one entry. If the ledger is empty, warn the user:
@@ -428,12 +425,9 @@ Prompt: |
   Read `.claude/skills/architect-planner/SKILL.md` for your instructions.
 
   TECH STACK CONTEXT:
-  <for each stack in STACK_REGISTRY, paste its architect-overlay.md under a
-   "## <Stack> Architecture Context" header>
-
-  <append cross-cutting overlays under "## Cross-Cutting: <name> Context" headers>
-
-  <append local overlays for the architect role per the Step 0.2 matrix; skip empty files>
+  <paste each STACK_REGISTRY stack's architect-overlay.md under "## <Stack> Architecture Context";
+   append cross-cutting overlays under "## Cross-Cutting: <name> Context";
+   append local overlays for the architect role per Step 0.2 matrix (skip empty)>
 
   STACK MAPPING (for task assignment — assign each task a stack based on its files):
   <for each stack, list its stack_paths patterns, e.g.:
@@ -482,7 +476,7 @@ proceeding. For all subsequent steps that need brief content (Step 2, Step 2.2, 
 the orchestrator reads `.claude/tmp/1b-plan.md` directly — never ask the architect to re-emit
 the plan.
 
-**Token tracking:** Record a `TOKEN_LEDGER` entry for the initial 1b agent launch (step `1b`). If implementation clarification questions occur, record each SendMessage round as step `1b:impl-clarify-N`. If plan revisions are requested, record each revision round as step `1b:revision-N`. Agent: `architect-agent`, model: as selected above (`sonnet` or `opus`).
+**Token tracking:** Per Step 0.6 — one entry for the initial launch (step `1b`); one per impl-clarification SendMessage (step `1b:impl-clarify-N`); one per revision (step `1b:revision-N`). agent=`architect-agent`, model=as selected above.
 
 **Plan revisions:** If the user requests changes, use **SendMessage** to the 1b agent (do NOT launch a new agent — the architect must remember its own plan). Iterate until confirmed.
 
@@ -539,11 +533,7 @@ Wait for the user's choice:
   Smallest viable fix only — do NOT modify unrelated source or introduce new abstractions."
   Re-number existing waves; original feature work starts at the now-renumbered Wave 1.
 
-**Token tracking:** Record one `TOKEN_LEDGER` entry per stack build attempt
-(step `1.4:<stack>`). Agent: `orchestrator`, model: `sonnet`. `input_chars` is
-0 (no prompt — direct subprocess), `output_chars` is the captured build
-output length. If failure handling fires, record an additional entry
-(step `1.4:user-decision`, notes `<a|b|c>`).
+**Token tracking:** Per Step 0.6 — one entry per stack build (step `1.4:<stack>`). agent=`orchestrator`, model=`sonnet`. `input_chars=0` (no prompt — direct subprocess), `output_chars`=captured build output length. If failure handling fires, also record `1.4:user-decision` with notes `<a|b|c>`.
 
 Runs pre-PR so `(a) abort` exits cleanly with no GitHub-side cleanup.
 
@@ -560,7 +550,7 @@ Provide to the skill:
 Record `PR_BRANCH`, `PR_NUMBER`, `PR_URL` for use in later steps.
 All subsequent commits and pushes target this branch.
 
-**Token tracking:** Record a `TOKEN_LEDGER` entry for the open-pr step (step `1.5`). Agent: `orchestrator`, model: `sonnet`. Measure the skill invocation prompt and output.
+**Token tracking:** Per Step 0.6 — one entry for step `1.5`. agent=`orchestrator`, model=`sonnet`.
 
 ### Step 2: IMPLEMENT
 
@@ -595,13 +585,9 @@ Prompt: |
   commands, coverage gate, self-review). No deviations.
 
   TECH STACK RULES:
-  <select overlay by model assignment from STACK_REGISTRY[<task_stack>]:
-    - Haiku tasks: paste implementer_essential overlay
-    - Sonnet/Opus tasks: paste implementer overlay (full)>
-
-  <append cross-cutting overlays (essential or full, matching model)>
-
-  <append local overlays for the implementer role per the Step 0.2 matrix; skip empty files>
+  <paste STACK_REGISTRY[<task_stack>]'s implementer overlay — essential variant for Haiku, full for Sonnet/Opus;
+   append cross-cutting overlays (matching model variant);
+   append local overlays for the implementer role per Step 0.2 matrix (skip empty)>
 
   BUILD COMMAND: python3 .claude/scripts/<task_stack>/build.py
   TEST COMMAND: python3 .claude/scripts/<task_stack>/test.py
@@ -622,7 +608,7 @@ would dilute Haiku's signal-to-noise ratio.
   SUCCESS in the wave, launch the reviewer agent. Otherwise, use SendMessage.
 - If `FAILURE`: report the failure details to the user immediately. Do NOT auto-retry implementation failures — these need human judgment. Do NOT block other tasks' reviews.
 
-**Token tracking:** Record a `TOKEN_LEDGER` entry for each implementer agent (step `2:<task_id>`, e.g., `2:1.1`). Agent: `implementer-agent`, model: as assigned by the plan.
+**Token tracking:** Per Step 0.6 — one entry per implementer (step `2:<task_id>`, e.g. `2:1.1`). agent=`implementer-agent`, model=as assigned by the plan.
 
 ### Step 2.1: REVIEW
 
@@ -668,13 +654,9 @@ Prompt: |
   ONLY the new changes presented.
 
   TECH STACK REVIEW RULES:
-  <for each unique stack in this wave's tasks, paste its reviewer-overlay.md
-   under a "## <Stack> Review Rules" header. Apply only the rules matching the
-   tech stack of the files under review.>
-
-  <append cross-cutting overlays under "## Cross-Cutting: <name> Review Rules" headers>
-
-  <append local overlays for the reviewer role per the Step 0.2 matrix; skip empty files>
+  <for each unique stack in this wave's tasks, paste its reviewer-overlay.md under "## <Stack> Review Rules" (apply only to matching files);
+   append cross-cutting overlays under "## Cross-Cutting: <name> Review Rules";
+   append local overlays for the reviewer role per Step 0.2 matrix (skip empty)>
 
   REVIEW THESE CHANGES:
 
@@ -707,7 +689,7 @@ agent for tasks 9+. This prevents context window saturation from accumulated rev
 the Backlog Integration section below. This happens after the pass/fail
 handshake — do not let it block the review cycle.
 
-**Token tracking:** Record a `TOKEN_LEDGER` entry for each review (step `2.1:<task_id>`). Agent: `code-reviewer-agent`, model: `sonnet` or `haiku` per the micro-plan rule above. For SendMessage reviews, `input_chars` is the SendMessage content (not the full accumulated context).
+**Token tracking:** Per Step 0.6 — one entry per review (step `2.1:<task_id>`). agent=`code-reviewer-agent`, model=`sonnet`/`haiku` per micro-plan rule above. For SendMessage reviews, `input_chars` is the SendMessage content only.
 
 ### Step 2.2: FIX
 
@@ -722,11 +704,9 @@ Prompt: |
   Follow your standard output protocol (SUCCESS/FAILURE).
 
   TECH STACK RULES:
-  <paste STACK_REGISTRY[<task_stack>].implementer overlay (full — fixes always get full overlay)>
-
-  <append cross-cutting overlays>
-
-  <append local overlays for the implementer role per the Step 0.2 matrix; skip empty files>
+  <paste STACK_REGISTRY[<task_stack>].implementer overlay (full — fixes always get full overlay);
+   append cross-cutting overlays;
+   append local overlays for the implementer role per Step 0.2 matrix (skip empty)>
 
   BUILD COMMAND: python3 .claude/scripts/<task_stack>/build.py
   TEST COMMAND: python3 .claude/scripts/<task_stack>/test.py
@@ -745,7 +725,7 @@ Prompt: |
   is sufficient — do NOT re-review. Skip the review-fix cycle.
 - If `FAILURE`: report to user with full context.
 
-**Token tracking:** Record a `TOKEN_LEDGER` entry for each fix (step `2.2:<task_id>`). Agent: `implementer-agent`, model: `sonnet`. Set `is_retry: true`. If the original task was assigned to haiku, also set `is_escalation: true` and note `escalated from haiku` in notes.
+**Token tracking:** Per Step 0.6 — one entry per fix (step `2.2:<task_id>`). agent=`implementer-agent`, model=`sonnet`, `is_retry=true`. If original task was Haiku, also `is_escalation=true` with notes `escalated from haiku`.
 
 ### Step 3: COMMIT + PUSH
 
@@ -834,10 +814,7 @@ Prompt: |
   handing back to the user. If Step 3.4 fails twice on the same scenario,
   stop and present the findings — do NOT loop.
 
-**Token tracking:** Record a `TOKEN_LEDGER` entry for the chrome-ui-test
-invocation (step `3.4`). Agent: `orchestrator` (skill, not an Agent launch),
-model: `sonnet` (the orchestrator's own model). If a re-run occurs after a
-fix, record it as `3.4:retry-N`.
+**Token tracking:** Per Step 0.6 — one entry for step `3.4` (re-runs as `3.4:retry-N`). agent=`orchestrator` (skill, not an Agent launch), model=`sonnet`.
 
 The automated smoke catches wiring failures; the user's manual test in 3.5 remains authoritative
 for UX, copy, and business-rule edge cases.
@@ -889,12 +866,9 @@ Prompt: |
   Do NOT enter plan mode — you may need to read code files.
 
   TECH STACK CONTEXT:
-  <for each stack in STACK_REGISTRY, paste its architect-overlay.md under a
-   "## <Stack> Architecture Context" header>
-
-  <append cross-cutting overlays>
-
-  <append local overlays for the architect role per the Step 0.2 matrix; skip empty files>
+  <paste each STACK_REGISTRY stack's architect-overlay.md under "## <Stack> Architecture Context";
+   append cross-cutting overlays;
+   append local overlays for the architect role per Step 0.2 matrix (skip empty)>
 
   A bug was found during manual testing of a feature implementation. Assess the
   blast radius of fixing this bug and recommend a fix approach.
@@ -941,12 +915,9 @@ Prompt: |
   Test baseline: BASELINE_COUNT passing tests.
 
   TECH STACK RULES:
-  <resolve stack from affected files using resolve_stack(), then paste
-   STACK_REGISTRY[<resolved_stack>].implementer overlay (full)>
-
-  <append cross-cutting overlays>
-
-  <append local overlays for the implementer role per the Step 0.2 matrix; skip empty files>
+  <resolve stack via resolve_stack() on affected files, paste STACK_REGISTRY[<resolved_stack>].implementer overlay (full);
+   append cross-cutting overlays;
+   append local overlays for the implementer role per Step 0.2 matrix (skip empty)>
 
   BUILD COMMAND: python3 .claude/scripts/<resolved_stack>/build.py
   TEST COMMAND: python3 .claude/scripts/<resolved_stack>/test.py
@@ -982,13 +953,9 @@ Prompt: |
   Use the PASS/FAIL output protocol from your agent definition.
 
   TECH STACK REVIEW RULES:
-  <resolve stack from affected files, then paste
-   STACK_REGISTRY[<resolved_stack>].reviewer overlay under
-   "## <Stack> Review Rules" header>
-
-  <append cross-cutting overlays>
-
-  <append local overlays for the reviewer role per the Step 0.2 matrix; skip empty files>
+  <resolve stack via resolve_stack() on affected files, paste STACK_REGISTRY[<resolved_stack>].reviewer overlay under "## <Stack> Review Rules";
+   append cross-cutting overlays;
+   append local overlays for the reviewer role per Step 0.2 matrix (skip empty)>
 
   This is a BUG FIX review. In addition to your standard checks, explicitly verify:
   - The fix does not revert or contradict the original implementation's intent
@@ -1006,11 +973,7 @@ Prompt: |
 SendMessage to: <bug-fix reviewer agent from first review>
 Message: |
   NEW REVIEW — discard all prior review context. Review ONLY the following changes.
-
-  This is a BUG FIX review. Explicitly verify:
-  - The fix does not revert or contradict the original implementation's intent
-  - The fix does not introduce regressions in adjacent functionality
-  - The test count has not decreased from the baseline
+  This is a BUG FIX review (same explicit checks as the first review above).
 
   REVIEW THESE CHANGES:
 
@@ -1020,10 +983,10 @@ Message: |
 **Cap at 8 reviews per agent** (same as wave reviews). If a manual test round produces more
 than 8 bug-fix reviews, launch a fresh reviewer for reviews 9+.
 
-**Token tracking:** Record `TOKEN_LEDGER` entries for each sub-step of the bug-fix cycle:
-- Blast-radius analysis (if triggered): step `3.5:assess:<bug_id>`, agent: `architect-agent`, model: `sonnet`
-- Bug fix: step `3.5:fix:<bug_id>`, agent: `implementer-agent`, model: `sonnet`, set `is_retry: true`
-- Bug fix review: step `3.5:review:<bug_id>`, agent: `code-reviewer-agent`, model: `sonnet`. For SendMessage reviews, `input_chars` is the SendMessage content only.
+**Token tracking:** Per Step 0.6 — one entry per bug-fix sub-step:
+- `3.5:assess:<bug_id>` — `architect-agent`, `sonnet` (only if blast-radius triggered)
+- `3.5:fix:<bug_id>` — `implementer-agent`, `sonnet`, `is_retry=true`
+- `3.5:review:<bug_id>` — `code-reviewer-agent`, `sonnet` (SendMessage `input_chars` is the message content only)
 
 #### 3.5.4: COMMIT + PUSH
 

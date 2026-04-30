@@ -17,6 +17,7 @@ The pipeline is **tech-stack-agnostic**. The core workflow is identical whether 
 ## Pipeline at a Glance
 
 ```mermaid
+%%{init: {'flowchart': {'wrappingWidth': 300}}}%%
 flowchart TD
     User([User describes feature]) --> S1a
     S1a["<b>Step 1a</b>: Clarify<br/>Sonnet · scope &amp; behavior Q&amp;A"]

@@ -78,6 +78,7 @@ For each agent launch:
 The composition is layered — pipeline-wide content first, then project-specific overrides:
 
 ```mermaid
+%%{init: {'flowchart': {'wrappingWidth': 320}}}%%
 flowchart LR
     subgraph PipelineRepo["From pipeline repo"]
         Adapter["Adapter overlay<br/>per stack, per agent role<br/>e.g. adapters/react/reviewer-overlay.md"]

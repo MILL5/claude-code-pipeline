@@ -23,7 +23,9 @@ User: "Add feature X" or /orchestrate
 Step 1a: FEATURE CLARIFICATION ──────────── architect-agent (Sonnet)
     |  Feature decomposition along product seams
     |  Fragile area scan against ORCHESTRATOR.md
-    |  Feature-only Q&A: scope, behavior, business rules (max 3 rounds)
+    |  Feature-only Q&A: scope, behavior, business rules
+    |    Soft-cap 2 SendMessage rounds; hard-cap 150K cumulative tokens
+    |    User can type FINALIZE NOW to force closure
     |  NO technical/architecture questions — deferred to 1b
     |  Output: .claude/tmp/1a-spec.md (enriched spec)
     v
@@ -33,22 +35,33 @@ Step 1b: IMPL CLARIFICATION & PLAN ────── architect-agent (Sonnet de
     |    Architecture approach, patterns, integration, data modeling, tradeoffs
     |  Phase 2: Cost-optimized decomposition: >=70% Haiku tasks
     |  Self-contained context briefs per task
-    |  Parallel waves with dependency ordering
+    |  Parallel waves with dependency ordering (cap 4 tasks per wave)
     |  Output: .claude/tmp/1b-plan.md (recovery artifact)
     |  User confirms plan before proceeding
+    v
+Step 1.4: PRE-FLIGHT BUILD VERIFICATION ── orchestrator
+    |  Run adapter build script on the unmodified base before launching Haiku
+    |  PASS  -> proceed to Step 1.5
+    |  FAIL  -> pause; ask user: abort | continue anyway | inject Wave 0 fix
+    |    Prevents Haiku failures from pre-existing build blockers
     v
 Step 1.5: OPEN PR ────────────────────────── orchestrator
     |  Create feature branch from main
     |  Open draft PR with plan summary + task checklist
     v
 Step 2: IMPLEMENT ────────────────────────── implementer-agent (Haiku/Sonnet/Opus)
-    |  One agent per task, parallel within waves
+    |  One agent per task, parallel within waves (cap 4)
     |  Each: implement -> self-review -> build -> test (>=90% coverage)
     |  Output: SUCCESS + commit message  OR  FAILURE + details
     v
-Step 2.1: REVIEW ─────────────────────────── code-reviewer-agent (Sonnet)
+Step 2.1: REVIEW ─────────────────────────── code-reviewer-agent (Sonnet, or Haiku on micro-plans)
     |  Aggressive review: memory leaks, race conditions, security, architecture
+    |  Cost-proportional reviewer (M3): single-wave plans with all briefs <3KB
+    |    use Haiku first-pass; Sonnet escalation on any FAIL
+    |  Reviewer reuse via SendMessage (cap 8 reviews per agent)
     |  Output: PASS  OR  FAIL + structured issues list
+    |          + OPTIONAL IMPROVEMENTS tagged [should-fix] / [nice-to-have] / [simplify]
+    |            (combined cap 5 entries; orchestrator folds or defers per backlog rules)
     v
 Step 2.2: FIX (if FAIL) ─────────────────── implementer-agent (Sonnet, escalated)
     |  Fix reviewer findings, re-build, re-test
@@ -59,7 +72,9 @@ Step 3: COMMIT + PUSH ───────────────────�
     |  Push after each commit (progress visible on draft PR)
     |  Record test baseline (total passing count)
     v
-Step 3.5: MANUAL TEST ───────────────────── user + orchestrator
+Step 3.5: MANUAL TEST + BROWSER UI ──────── user + orchestrator + chrome-ui-test (optional)
+    |  Optional automated browser smoke via the chrome-ui-test skill (React UIs)
+    |    Failures route into the same fix loop as user-reported bugs
     |  User tests the PR branch, reports bugs
     |  Each bug: assess blast radius -> fix -> review -> commit
     |  Regression guard: test count must never decrease
@@ -78,19 +93,56 @@ Step 5: TOKEN ANALYSIS ───────────────────
 User merges when ready (pipeline never auto-merges)
 ```
 
+### Pipeline at a Glance
+
+```mermaid
+flowchart TD
+    User([User describes feature]) --> S1a
+    S1a["<b>Step 1a</b>: Clarify<br/>Sonnet · scope &amp; behavior Q&amp;A"]
+    S1a --> S1b
+    S1b["<b>Step 1b</b>: Plan<br/>Sonnet default, Opus if novel<br/>decompose into Haiku waves"]
+    S1b --> S14
+    S14["<b>Step 1.4</b>: Pre-flight build<br/>orchestrator"]
+    S14 --> S15
+    S15["<b>Step 1.5</b>: Open draft PR"]
+    S15 --> S2
+
+    subgraph Wave["Wave loop (parallel within wave, max 4 tasks)"]
+        direction TB
+        S2["<b>Step 2</b>: Implement<br/>Haiku per task"]
+        S21["<b>Step 2.1</b>: Review<br/>Sonnet, or Haiku on micro-plans"]
+        S22["<b>Step 2.2</b>: Fix on FAIL<br/>Sonnet"]
+        S3["<b>Step 3</b>: Commit &amp; push"]
+        S2 --> S21
+        S21 -- PASS --> S3
+        S21 -- FAIL --> S22
+        S22 --> S21
+    end
+
+    S3 --> S35
+    S35["<b>Step 3.5</b>: Manual test<br/>+ chrome-ui-test (optional)<br/>user + orchestrator"]
+    S35 --> S4
+    S4["<b>Step 4</b>: Finalize PR"]
+    S4 --> S5
+    S5["<b>Step 5</b>: Token analysis<br/>(concurrent with Step 4)"]
+    S5 --> Merge([User reviews &amp; merges])
+```
+
+**Reading the diagram:** rectangular nodes are pipeline steps; the *Wave loop* subgraph executes once per dependency wave (typically 1–3 waves per feature). Steps 1a/1b are blocking on user approval; Step 3.5 is blocking on user manual testing. Step 5 runs in parallel with Step 4 to overlap analysis with PR finalization.
+
 ## Quick Start
 
 ### 1. Clone the pipeline into your project
 
 ```bash
 cd your-project
-git clone https://github.com/swtarmey/claude-code-pipeline.git .claude/pipeline
+git clone https://github.com/MILL5/claude-code-pipeline.git .claude/pipeline
 ```
 
 Or add as a git submodule for version-pinned updates:
 
 ```bash
-git submodule add https://github.com/swtarmey/claude-code-pipeline.git .claude/pipeline
+git submodule add https://github.com/MILL5/claude-code-pipeline.git .claude/pipeline
 ```
 
 ### 2. Bootstrap
@@ -208,6 +260,8 @@ Agents are **generic** — they contain no tech-stack-specific knowledge. Stack 
 | `summarize-implementation` | After implementation tasks | Generates conventional-commit messages |
 | `token-analysis` | Step 5 (via orchestrator, mandatory) | Analyzes pipeline token usage, files GitHub issues for optimization findings |
 | `fix-defects` | `/fix-defects`, "fix defects", "fix PR defects" | Reads defect reports from PR comments, triages by severity, runs fix pipeline |
+| `chrome-ui-test` | Step 3.5 (when configured), `/chrome-ui-test` | Optional automated browser smoke test for React UIs; failures route into the standard bug-fix loop |
+| `bootstrap-backlog` | `/bootstrap-backlog` (one-time per repo) | Provisions GitHub labels, Issue Form templates, and the sentinel config that enables backlog integration |
 | `update-pipeline` | `/update-pipeline`, "update pipeline" | Updates pipeline submodule, validates, commits bump |
 | `azure-login` | `/azure-login`, auto before Azure-dependent steps | Validates Azure auth, subscription context, RBAC permissions |
 | `validate-bicep` | `/validate-bicep` | Bicep lint + build + optional what-if dry run |
@@ -217,7 +271,21 @@ Agents are **generic** — they contain no tech-stack-specific knowledge. Stack 
 | `infra-test-runner` | `/infra-test-runner` | ARM-TTK/Pester infrastructure validation tests |
 | `azure-drift-check` | `/azure-drift-check` | Detect config drift between templates and deployed state |
 
+### Reviewer Tag Taxonomy
+
+Step 2.1 reviews emit a `PASS` or `FAIL` header followed by an optional `--- OPTIONAL IMPROVEMENTS ---` section. Each entry in that section is prefixed with one of three tags so the orchestrator can route it deterministically:
+
+| Tag | Meaning | Default routing |
+|-----|---------|-----------------|
+| `[should-fix]` | Real improvement, not a blocker. Tight duplication, missing abstraction, naming inconsistency the reviewer would raise again next time. | Fold candidate (subject to fold cap) |
+| `[nice-to-have]` | Genuinely optional polish, speculative refactors, defensive code for unlikely cases. | Defer to backlog |
+| `[simplify]` | Behavior-preserving rewrite for clarity, idiom, or concision. The reviewer must be confident the rewrite is observably equivalent — tests are the enforcement gate. | Fold by default; defer when emitted by a Haiku reviewer |
+
+The combined cap across all three tags is 5 entries per review (forces explicit prioritization). When the spawned implementer for a `[simplify]` task fails the build/test gate, the simplification is **abandoned** rather than entering the standard fix loop — if tests fail, the rewrite is wrong by construction.
+
 ### Adapter Injection Flow
+
+At runtime the orchestrator stitches a generic agent together with stack-specific knowledge before each launch:
 
 ```
 Orchestrator reads .claude/pipeline.config
@@ -228,11 +296,46 @@ Loads adapters/<stack>/adapter.md (metadata)
     v
 For each agent launch:
     1. Read generic agent definition (agents/<name>.md)
-    2. Read relevant overlay (adapters/<stack>/<name>-overlay.md)
+    2. Resolve task stack from file paths via stack_paths.* patterns
+    3. Read role overlay (adapters/<stack>/<role>-overlay.md)
        - Haiku implementers: use implementer-overlay-essential.md instead
-    3. Insert overlay at <!-- ADAPTER:TECH_STACK_CONTEXT --> marker
-    4. Pass composed prompt to Agent tool
+    4. Append cross-cutting overlays (e.g., overlays/azure-sdk/<role>-overlay.md)
+    5. Append .claude/local/ files for that role (per the matrix below)
+    6. Insert composed text at the agent's <!-- ADAPTER:TECH_STACK_CONTEXT --> marker
+    7. Pass composed prompt to Agent tool
 ```
+
+The composition is layered — pipeline-wide content first, then project-specific overrides:
+
+```mermaid
+flowchart LR
+    subgraph PipelineRepo["From pipeline repo"]
+        Adapter["Adapter overlay<br/>per stack, per agent role<br/>e.g. adapters/react/reviewer-overlay.md"]
+        CrossCut["Cross-cutting overlay<br/>e.g. overlays/azure-sdk/reviewer-overlay.md<br/>(when capability triggers)"]
+    end
+
+    subgraph LocalRepo["From your repo (.claude/local/)"]
+        ProjectOverlay["project-overlay.md<br/>injected into all agents"]
+        RoleOverlay["role file<br/>coding-standards / architecture-rules / review-criteria"]
+    end
+
+    Adapter --> Compose
+    CrossCut --> Compose
+    ProjectOverlay --> Compose
+    RoleOverlay --> Compose
+
+    Compose["Composed in order at the agent's<br/>ADAPTER:TECH_STACK_CONTEXT marker"]
+    Compose --> Agent
+    Agent["Generic agent definition<br/>e.g. agents/code-reviewer-agent.md"]
+    Agent --> Launch["Launch with composed prompt"]
+```
+
+**Key consequences of this model:**
+
+- **Multi-stack support:** when a task touches a React file, it gets React overlays; a Python file in the same wave gets Python overlays. The orchestrator resolves the stack per task using `stack_paths` patterns.
+- **Capability-driven overlays:** cross-cutting overlays (e.g., `azure-sdk`) attach when adapter manifests declare matching capabilities — not by checking stack names. Adding a new adapter that declares `"capabilities": ["azure-auth"]` automatically pulls in the Azure overlay without editing pipeline code.
+- **Two overlay variants per implementer:** the full `implementer-overlay.md` for Sonnet/Opus tasks, and a compact `implementer-overlay-essential.md` (≤1000 chars) for Haiku tasks to maximize signal-to-noise. The reviewer always uses the full overlay and catches what the essential variant elides.
+- **Architect agents see all stacks:** for cross-stack design decisions; reviewer agents see the union of stacks present in the current wave's tasks.
 
 This means:
 - **Updating the pipeline** (`/update-pipeline` or git pull) immediately updates all projects using it
@@ -314,6 +417,8 @@ claude-code-pipeline/
 |   |-- summarize-implementation/SKILL.md # Conventional commit messages
 |   |-- token-analysis/SKILL.md          # Step 5: token usage analysis + issue filing
 |   |-- fix-defects/SKILL.md             # Standalone: fix defects from PR comments
+|   |-- chrome-ui-test/SKILL.md          # Step 3.5 (optional): browser UI smoke test
+|   |-- bootstrap-backlog/SKILL.md       # One-time: provision GitHub labels + Issue Forms + sentinel
 |   |-- update-pipeline/SKILL.md         # Update pipeline submodule with validation
 |   |-- azure-login/SKILL.md             # Azure auth pre-flight validation
 |   |-- validate-bicep/SKILL.md          # Bicep lint + build + what-if
@@ -410,7 +515,7 @@ claude-code-pipeline/
 |       +-- reviewer-overlay.md          # Auth, resilience, lifecycle, security, cost
 |
 |-- tests/                               # Pipeline self-tests (4 layers)
-|   |-- validate_structure.py            # Layer 1: structural integrity (~277 checks, auto-scales with adapters)
+|   |-- validate_structure.py            # Layer 1: structural integrity (~376 checks, auto-scales with adapters)
 |   |-- test_contracts.py                # Layer 3: output protocol contract tests
 |   |-- parsers.py                       # Shared output protocol parsers (used by L3 + L4)
 |   |-- fixtures/                        # Golden output fixtures for contract tests
@@ -487,6 +592,8 @@ You don't have to use the full pipeline. Individual skills work standalone:
 /open-pr                         # Create a branch + draft PR
 /summarize-implementation        # Generate a commit message from current diff
 /fix-defects                     # Fix defects reported on a PR
+/chrome-ui-test                  # Browser UI smoke test (React UIs)
+/bootstrap-backlog               # One-time: enable GitHub backlog integration
 /update-pipeline                 # Update pipeline submodule to latest
 
 # Azure skills (see docs/azure-guide.md for details)
@@ -505,6 +612,29 @@ Backlog integration captures out-of-scope work surfaced during `/orchestrate`
 runs — reviewer nice-to-haves, architect scope cuts, token-analysis findings —
 as durable GitHub issues with a namespaced label taxonomy. Small, Haiku-tier
 items fold into the current run; anything larger defers to the backlog.
+
+**Fold vs. defer at a glance:**
+
+```mermaid
+flowchart TD
+    Source["Out-of-scope item surfaced by:<br/>• Reviewer (OPTIONAL IMPROVEMENTS, tagged)<br/>• Planner (Deferred Items)<br/>• Implementer (Follow-up suggestion)<br/>• Token analysis (always defers)"]
+    Source --> Classify{Haiku-tier?<br/>single-file<br/>mechanical<br/>fully-specified}
+
+    Classify -- yes --> CapCheck{Fold cap<br/>reached?<br/>default 3}
+    Classify -- no --> Defer
+
+    CapCheck -- no --> Fold["FOLD<br/>spawn new Haiku task<br/>in next wave"]
+    CapCheck -- yes --> Defer
+
+    Fold --> RunLog1["run-log.yml<br/>action: folded"]
+    Defer["DEFER<br/>file GitHub issue via<br/>scripts/backlog_file.py"]
+    Defer --> RunLog2["run-log.yml<br/>action: deferred"]
+
+    RunLog1 --> PRBody["Step 4: render<br/>'Folded in this run'<br/>checklist in PR body"]
+    RunLog2 --> Issue["GitHub issue<br/>with traceability block:<br/>PR #, run-id, phase"]
+```
+
+The fold cap is shared across all phases (planner + reviewer + implementer + token-analysis combined), preventing reviewer and planner from collectively turning into a second round of implementation work. `[simplify]`-tagged reviewer entries fold by default but defer when emitted by a Haiku reviewer (an extra safety guard — Haiku judgment on behavior preservation isn't yet trusted enough for in-run auto-apply).
 
 **Prerequisites**
 
@@ -881,14 +1011,14 @@ The pipeline includes a 4-layer integration test suite that validates structural
 
 ```bash
 # Layer 1: Static validation — checks all files exist, markers present,
-# cross-references resolve, overlays within size limits (~277 checks, instant)
+# cross-references resolve, overlays within size limits (~376 checks, instant)
 python3 tests/validate_structure.py
 
 # Layer 2: Dry-run mode — planned but not yet implemented.
 # Will compose all prompts without launching agents for prompt validation.
 
 # Layer 3: Contract tests — validates output protocol parsers against
-# golden fixtures for all agent and script output formats (51 tests, instant)
+# golden fixtures for all agent and script output formats (80 tests, instant)
 python3 tests/test_contracts.py
 
 # Layer 4: Smoke test — creates a temporary project, runs init.sh,

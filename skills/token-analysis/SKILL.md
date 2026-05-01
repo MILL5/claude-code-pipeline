@@ -71,6 +71,18 @@ Gates suppressed for small plans (< 4 tasks):
   **not** suppressed)
 - **Section 7** — aggregate file-read overhead > 30% gate
 
+**Structural-overhead adjustment:** Even on plans with ≥4 implementation tasks, fixed
+Sonnet-tier overhead can structurally dominate when the 1b plan or wave reviewer is expensive.
+When `(step_1a_cost + step_1b_cost + reviewer_cost) / total_cost > 0.25`, the Sonnet target
+of 20% is mathematically unreachable regardless of planner quality (overhead alone exceeds
+the target ceiling). In this case, suppress the model-distribution 15pp-deviation gate and
+emit a one-line note: *"Structural overhead dominates (1a+1b+reviewer = X% of total):
+model-distribution gate suppressed — overhead alone exceeds Sonnet target."*
+
+Apply only the model-distribution suppression here, not the broader small-plan suppression.
+Other gates (review-ratio, step-anomalies, file-read overhead) remain in force because they
+target distinct failure modes.
+
 Continue to compute and report all distributions and ratios for visibility; the suppression
 only prevents these from tripping the filing threshold and generating findings.
 
@@ -182,9 +194,12 @@ Fixed orchestrator overhead: ~N,NNN tokens (~$X.XX at Sonnet input rates)
 This is loaded ~once per /orchestrate run, separate from per-agent costs.
 ```
 
-If `fixed_overhead_tokens > 25,000`, flag as a finding — the orchestrate skill or overlays
-have grown enough that pipeline startup cost is becoming significant. Recommend trimming the
-orchestrate skill (it should target <15K tokens) or splitting overlay content.
+If `fixed_overhead_tokens > 35,000`, flag as a finding — overhead has grown beyond the
+post-trim structural floor (~35K for a two-stack project after #59 trim work). Recommend
+splitting overlay content or lazy-loading on-demand sections of orchestrate/SKILL.md. Do
+not flag for being merely above the older 25K target — that target is structurally
+unreachable without a larger restructure (split orchestrate, lazy-load overlays per task),
+and recurring findings against an unactionable floor are noise.
 
 ### 8. Output Bloat Detection (per-agent-type baselines)
 

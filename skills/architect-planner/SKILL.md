@@ -223,6 +223,19 @@ implementer receives.
 | Requires design decisions OR multi-file consistency OR moderate reasoning | **Sonnet** | ~$0.03-0.15 |
 | Irreducibly complex: novel algorithm, concurrent correctness, architectural decisions | **Opus** | ~$0.10-0.50 |
 
+**Coverage-test tasks default to Haiku.** Test-writing tasks (adding `*.test.*` files for an
+existing component, hook, or function) qualify as "fully specified, single file" by default.
+Escalate to Sonnet only when one of these signals applies:
+
+- More than 3 mocked dependencies (mocked modules, hooks, or services in a single test file)
+- Async or concurrent behavior under test (timers, race conditions, ordering invariants)
+- Test output expected to exceed 300 lines (rough proxy: more than ~25 cases or >5 setup helpers)
+- Tests asserting cross-component or cross-module state (integration-style tests)
+
+A 16-test component file with two event-handler mocks is Haiku. A 40-test file with six mocked
+modules is Sonnet. When in doubt, prefer Haiku and let the reviewer flag if the brief was
+under-specified.
+
 **Cost check**: After assignment, compute the estimated total cost. Compare against "what if we ran everything on Sonnet" and "what if we ran everything on Opus." The mixed strategy should be meaningfully cheaper.
 
 ### Step 6: Define Execution Order
@@ -434,6 +447,8 @@ Sometimes the planner can't fully specify a task because it depends on runtime d
 | Signal | Model | Why |
 |--------|-------|-----|
 | Clear, self-contained spec | **Haiku** | Cheapest, fast, reliable |
+| Coverage test for existing code, ≤3 mocks, no async, <25 cases | **Haiku** | Default for test-writing tasks |
+| Coverage test with >3 mocks, async behavior, or integration scope | **Sonnet** | Mock orchestration / cross-module reasoning |
 | Multi-file changes needing consistency | **Sonnet** | Cross-file coherence |
 | >3 interacting edge cases or >300 lines output | **Sonnet** | Haiku drops edge cases / drifts |
 | Design decisions constraining downstream tasks | **Sonnet** | Requires judgment |

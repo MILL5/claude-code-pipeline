@@ -1,75 +1,30 @@
 {
   "adapter": "python",
-  "discovery_mode": "skill_md_headings",
-  "git_sha": "29307f2fcc4c51f49d14772a6114ac83c69c11dc",
+  "discovery_mode": "steps_dir",
+  "git_sha": "7bff577cf4ee76de09089692257e0ce41d78df22",
   "measurements": {
     "initial_load": {
-      "chars": 72125,
-      "est_tokens": 18031
-    },
-    "step_1.4": {
-      "cumulative_chars": 72125,
-      "delta_chars": 0,
-      "est_tokens": 18031
-    },
-    "step_1.5": {
-      "cumulative_chars": 72125,
-      "delta_chars": 0,
-      "est_tokens": 18031
+      "chars": 56313,
+      "est_tokens": 14078
     },
     "step_1a": {
-      "cumulative_chars": 72125,
-      "delta_chars": 0,
-      "est_tokens": 18031
-    },
-    "step_1b": {
-      "cumulative_chars": 72125,
-      "delta_chars": 0,
-      "est_tokens": 18031
-    },
-    "step_2": {
-      "cumulative_chars": 72125,
-      "delta_chars": 0,
-      "est_tokens": 18031
+      "cumulative_chars": 62231,
+      "delta_chars": 5918,
+      "est_tokens": 15557
     },
     "step_2.1": {
-      "cumulative_chars": 72125,
-      "delta_chars": 0,
-      "est_tokens": 18031
-    },
-    "step_2.2": {
-      "cumulative_chars": 72125,
-      "delta_chars": 0,
-      "est_tokens": 18031
-    },
-    "step_3": {
-      "cumulative_chars": 72125,
-      "delta_chars": 0,
-      "est_tokens": 18031
-    },
-    "step_3.4": {
-      "cumulative_chars": 72125,
-      "delta_chars": 0,
-      "est_tokens": 18031
+      "cumulative_chars": 68241,
+      "delta_chars": 6010,
+      "est_tokens": 17060
     },
     "step_3.5": {
-      "cumulative_chars": 72125,
-      "delta_chars": 0,
-      "est_tokens": 18031
-    },
-    "step_4": {
-      "cumulative_chars": 72125,
-      "delta_chars": 0,
-      "est_tokens": 18031
-    },
-    "step_5": {
-      "cumulative_chars": 72125,
-      "delta_chars": 0,
-      "est_tokens": 18031
+      "cumulative_chars": 76508,
+      "delta_chars": 8267,
+      "est_tokens": 19127
     },
     "total": {
-      "chars": 72125,
-      "est_tokens": 18031
+      "chars": 76508,
+      "est_tokens": 19127
     }
   },
   "schema_version": 1

@@ -44,6 +44,26 @@ def discover_overlays() -> list[str]:
     )
 
 
+def read_orchestrate_corpus() -> str:
+    """Return SKILL.md + all extracted step files concatenated.
+
+    Step files in `skills/orchestrate/steps/` are lazy-loaded by the
+    orchestrator at runtime (issue #74). For documentation-style grep
+    checks, treat the orchestrate skill as the union of SKILL.md and
+    all step files — content moved out of SKILL.md still belongs to
+    the orchestrate skill's documentation.
+    """
+    skill_md = PIPELINE_ROOT / "skills" / "orchestrate" / "SKILL.md"
+    if not skill_md.exists():
+        return ""
+    parts = [skill_md.read_text()]
+    steps_dir = PIPELINE_ROOT / "skills" / "orchestrate" / "steps"
+    if steps_dir.is_dir():
+        for step_file in sorted(steps_dir.glob("*.md")):
+            parts.append(step_file.read_text())
+    return "\n".join(parts)
+
+
 ADAPTERS = discover_adapters()
 
 REQUIRED_ADAPTER_FILES = [
@@ -707,11 +727,9 @@ def check_planner_small_edit_brief_mode(result: ValidationResult) -> None:
 
 def check_orchestrate_reads_plan_from_disk(result: ValidationResult) -> None:
     """Orchestrate must read 1b-plan.md from disk, not from agent output."""
-    orchestrate_path = PIPELINE_ROOT / "skills" / "orchestrate" / "SKILL.md"
-    if not orchestrate_path.exists():
+    content = read_orchestrate_corpus()
+    if not content:
         return
-
-    content = orchestrate_path.read_text()
 
     if "PLAN_WRITTEN" in content:
         result.ok("Orchestrate references PLAN_WRITTEN stub")
@@ -726,11 +744,9 @@ def check_orchestrate_reads_plan_from_disk(result: ValidationResult) -> None:
 
 def check_orchestrate_overlay_selection(result: ValidationResult) -> None:
     """Orchestrate must document Haiku vs full overlay selection logic."""
-    orchestrate_path = PIPELINE_ROOT / "skills" / "orchestrate" / "SKILL.md"
-    if not orchestrate_path.exists():
+    content = read_orchestrate_corpus()
+    if not content:
         return
-
-    content = orchestrate_path.read_text()
 
     if "implementer-overlay-essential.md" in content:
         result.ok("Orchestrate references essential overlay for Haiku tasks")
@@ -745,11 +761,9 @@ def check_orchestrate_overlay_selection(result: ValidationResult) -> None:
 
 def check_orchestrate_token_ledger(result: ValidationResult) -> None:
     """Orchestrate must define TOKEN_LEDGER schema and recording instructions."""
-    orchestrate_path = PIPELINE_ROOT / "skills" / "orchestrate" / "SKILL.md"
-    if not orchestrate_path.exists():
+    content = read_orchestrate_corpus()
+    if not content:
         return
-
-    content = orchestrate_path.read_text()
 
     required_fields = [
         "step", "agent", "model", "input_chars", "output_chars",
@@ -765,11 +779,9 @@ def check_orchestrate_token_ledger(result: ValidationResult) -> None:
 
 def check_orchestrate_reviewer_reuse(result: ValidationResult) -> None:
     """Orchestrate must document reviewer reuse via SendMessage."""
-    orchestrate_path = PIPELINE_ROOT / "skills" / "orchestrate" / "SKILL.md"
-    if not orchestrate_path.exists():
+    content = read_orchestrate_corpus()
+    if not content:
         return
-
-    content = orchestrate_path.read_text()
 
     if "SendMessage" in content and "NEW REVIEW" in content:
         result.ok("Orchestrate documents reviewer reuse via SendMessage")
@@ -821,11 +833,9 @@ def check_version_file(result: ValidationResult) -> None:
 
 def check_orchestrate_local_overlay_loading(result: ValidationResult) -> None:
     """Orchestrate must document local overlay loading from .claude/local/."""
-    orchestrate_path = PIPELINE_ROOT / "skills" / "orchestrate" / "SKILL.md"
-    if not orchestrate_path.exists():
+    content = read_orchestrate_corpus()
+    if not content:
         return
-
-    content = orchestrate_path.read_text()
 
     if ".claude/local/" in content:
         result.ok("Orchestrate documents local overlay loading")
@@ -845,11 +855,9 @@ def check_orchestrate_local_overlay_loading(result: ValidationResult) -> None:
 
 def check_orchestrate_workflow_optimizations(result: ValidationResult) -> None:
     """Orchestrate must document key workflow optimizations."""
-    orchestrate_path = PIPELINE_ROOT / "skills" / "orchestrate" / "SKILL.md"
-    if not orchestrate_path.exists():
+    content = read_orchestrate_corpus()
+    if not content:
         return
-
-    content = orchestrate_path.read_text()
 
     # Streaming reviews: reviews start as implementers complete, not after full wave
     if "Streaming review" in content or "streaming review" in content.lower():
@@ -914,11 +922,9 @@ def check_orchestrate_fold_notes(result: ValidationResult) -> None:
     Step 2/2.1 lines. The `fold:` notes prefix lets token-analysis aggregate fold cost
     into a dedicated "Folds" row so users see fold spend distinct from planned waves.
     """
-    orchestrate_path = PIPELINE_ROOT / "skills" / "orchestrate" / "SKILL.md"
-    if not orchestrate_path.exists():
+    content = read_orchestrate_corpus()
+    if not content:
         return
-
-    content = orchestrate_path.read_text()
 
     if "fold:" in content and "fold:<source-phase>" in content:
         result.ok("Orchestrate Backlog Integration documents fold-cost notes pattern")
@@ -954,11 +960,9 @@ def check_orchestrate_clarification_cap(result: ValidationResult) -> None:
     Soft-cap of 2 rounds with a 150K cumulative-token hard cap forces closure when the
     user is digging deeper rather than introducing new decision points.
     """
-    orchestrate_path = PIPELINE_ROOT / "skills" / "orchestrate" / "SKILL.md"
-    if not orchestrate_path.exists():
+    content = read_orchestrate_corpus()
+    if not content:
         return
-
-    content = orchestrate_path.read_text()
 
     if "Round cap" in content and "150K" in content:
         result.ok("Orchestrate Step 1a documents clarification round cap with token budget")
@@ -984,11 +988,9 @@ def check_orchestrate_no_full_orchestrator_fallback(result: ValidationResult) ->
     extract logic fell back to loading the entire ORCHESTRATOR.md. The mitigation is
     partial-extract + missing-header note, never full file.
     """
-    orchestrate_path = PIPELINE_ROOT / "skills" / "orchestrate" / "SKILL.md"
-    if not orchestrate_path.exists():
+    content = read_orchestrate_corpus()
+    if not content:
         return
-
-    content = orchestrate_path.read_text()
 
     if "paste the full file" in content.lower():
         result.fail(
@@ -1056,11 +1058,9 @@ def check_skill_frontmatter(result: ValidationResult) -> None:
 
 def check_cross_references(result: ValidationResult) -> None:
     """Verify key cross-references between pipeline files resolve."""
-    orchestrate_path = PIPELINE_ROOT / "skills" / "orchestrate" / "SKILL.md"
-    if not orchestrate_path.exists():
+    content = read_orchestrate_corpus()
+    if not content:
         return
-
-    content = orchestrate_path.read_text()
 
     # Orchestrate must reference all agent types it launches
     agent_refs = {
@@ -1204,11 +1204,9 @@ def check_overlay_essential_size(result: ValidationResult) -> None:
 
 def check_orchestrate_overlay_loading(result: ValidationResult) -> None:
     """Orchestrate must document cross-cutting overlay loading."""
-    orchestrate_path = PIPELINE_ROOT / "skills" / "orchestrate" / "SKILL.md"
-    if not orchestrate_path.exists():
+    content = read_orchestrate_corpus()
+    if not content:
         return
-
-    content = orchestrate_path.read_text()
 
     if "overlays" in content.lower():
         result.ok("Orchestrate documents overlay loading")
@@ -1219,6 +1217,101 @@ def check_orchestrate_overlay_loading(result: ValidationResult) -> None:
         result.ok("Orchestrate documents cross-cutting overlay composition")
     else:
         result.fail("Orchestrate missing cross-cutting overlay composition documentation")
+
+
+VALID_SENDMESSAGE = {"required", "optional", "n/a"}
+REQUIRED_STEP_FRONTMATTER_KEYS = ["step", "requires", "produces", "sendmessage"]
+
+
+def _parse_step_frontmatter(content: str) -> dict[str, str] | None:
+    """Parse YAML-ish front-matter from a step file. Returns dict or None.
+
+    Supports the limited subset used by step files:
+        step: "1a"           (string, may be quoted)
+        requires: []          (bracket list, comma-separated paths)
+        produces: [a, b]
+        sendmessage: required (bare token)
+    """
+    fm_re = re.compile(r"^---\n(.*?)\n---", re.DOTALL)
+    match = fm_re.match(content)
+    if not match:
+        return None
+    body = match.group(1)
+    out: dict[str, str] = {}
+    for line in body.split("\n"):
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if ":" not in line:
+            continue
+        key, _, val = line.partition(":")
+        out[key.strip()] = val.strip()
+    return out
+
+
+def _parse_artifact_list(raw: str) -> list[str]:
+    """Parse `[a, b, c]` or empty `[]` into a list of artifact paths."""
+    raw = raw.strip()
+    if raw in ("[]", ""):
+        return []
+    if raw.startswith("[") and raw.endswith("]"):
+        raw = raw[1:-1]
+    return [item.strip().strip('"').strip("'") for item in raw.split(",") if item.strip()]
+
+
+def check_orchestrate_step_files(result: ValidationResult) -> None:
+    """Step files in skills/orchestrate/steps/ must have valid front-matter.
+
+    Front-matter contract (issue #74):
+        step: <id>
+        requires: [<.claude/tmp/ artifacts>]
+        produces: [<artifacts>]
+        sendmessage: required | optional | n/a
+
+    Each artifact declared in requires/produces must appear as a substring in
+    the step body (catches drift between front-matter and prose).
+
+    No-op if steps/ does not exist (pre-Lever-1 state).
+    """
+    steps_dir = PIPELINE_ROOT / "skills" / "orchestrate" / "steps"
+    if not steps_dir.is_dir():
+        return
+
+    step_files = sorted(steps_dir.glob("*.md"))
+    if not step_files:
+        result.fail("Orchestrate steps/ directory exists but contains no .md files")
+        return
+
+    for step_file in step_files:
+        rel = step_file.relative_to(PIPELINE_ROOT)
+        content = step_file.read_text()
+        fm = _parse_step_frontmatter(content)
+        if fm is None:
+            result.fail(f"{rel}: missing or malformed YAML front-matter")
+            continue
+
+        for key in REQUIRED_STEP_FRONTMATTER_KEYS:
+            if key not in fm:
+                result.fail(f"{rel}: front-matter missing required key '{key}'")
+
+        sendmessage = fm.get("sendmessage", "")
+        if sendmessage and sendmessage not in VALID_SENDMESSAGE:
+            result.fail(
+                f"{rel}: sendmessage='{sendmessage}' is not one of "
+                f"{sorted(VALID_SENDMESSAGE)}"
+            )
+
+        body_after_fm = re.sub(r"^---\n.*?\n---\n?", "", content, count=1, flags=re.DOTALL)
+
+        for kind in ("requires", "produces"):
+            for artifact in _parse_artifact_list(fm.get(kind, "[]")):
+                if artifact not in body_after_fm:
+                    result.fail(
+                        f"{rel}: {kind} declares '{artifact}' but it does not "
+                        f"appear in the step body (drift)"
+                    )
+
+        result.ok(f"{rel}: front-matter valid")
 
 
 REQUIRED_ADAPTER_MANIFEST_FIELDS = ["name", "display_name", "capabilities", "detection", "stack_paths"]
@@ -1367,6 +1460,7 @@ def run_all_checks(verbose: bool = False) -> ValidationResult:
         ("Overlay completeness", check_overlay_completeness),
         ("Overlay essential size", check_overlay_essential_size),
         ("Orchestrate overlay loading", check_orchestrate_overlay_loading),
+        ("Orchestrate step files (#74)", check_orchestrate_step_files),
         ("Manifest validity", check_manifest_validity),
     ]
 

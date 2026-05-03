@@ -330,115 +330,32 @@ the user whether to proceed without codebase context or update ORCHESTRATOR.md f
 | 4 | orchestrator (update ORCHESTRATOR.md, finalize PR, mark ready) | — | PR ready for review |
 | 5 | token-analysis skill (mandatory, runs in background concurrent with 4) | Sonnet | GitHub issue on pipeline repo if findings exist |
 
+## Step Dispatch
+
+The orchestrator runs the steps below in sequence. Steps marked **extracted** have been moved to `skills/orchestrate/steps/<file>.md` for context efficiency — read each one just-in-time, immediately before executing that step. Inline steps remain in this file.
+
+| Step | Extracted | Description |
+|------|-----------|-------------|
+| 1a | `steps/1a-clarify.md` | Analyze user request, surface clarifying Qs, write `1a-spec.md` |
+| 1b | inline | Plan generation from `1a-spec.md` |
+| 1.4 | inline | Pre-flight build verification |
+| 1.5 | inline | Open draft PR |
+| 2 | inline | Implement waves |
+| 2.1 | `steps/2.1-review.md` | Code review (per-wave reused agent) |
+| 2.2 | inline | Fix issues from review |
+| 3 | inline | Commit + push per task |
+| 3.4 | inline | Browser UI test (conditional) |
+| 3.5 | `steps/3.5-manual-test.md` | Manual test loop with bug fixes |
+| 4 | inline | Finalize PR |
+| 5 | inline | Token analysis (background) |
+
+**Protocol:** Before executing an extracted step, read its file in full. The file's front-matter declares `step:`, `requires:` (`.claude/tmp/` artifacts that must exist), `produces:` (artifacts written), and `sendmessage:` (required/optional/n/a). If a `requires:` artifact is missing at runtime, halt with a clear error citing the artifact name and the step that produces it.
+
 ## Detailed Steps
 
 ### Step 1a: ANALYZE & CLARIFY
 
-**Pre-flight check (orchestrator, before launching the 1a agent):**
-
-1. Run `git status` — if the working tree is dirty, warn the user before proceeding.
-2. Run `git branch --show-current` — confirm you are on the expected branch.
-3. Check ORCHESTRATOR.md "Current State" — note the last known build/test status and date. If the last recorded status is older than the most recent commit, recommend the user run a build/test pass before planning.
-
-**1a passthrough detection (orchestrator, runs BEFORE the resume check below):**
-
-Check whether the user's `/orchestrate` request body is structurally a near-complete
-spec — i.e., the user supplied a detailed plan (e.g., an existing `OPTIMIZATION_PLAN.md`)
-rather than a brief request. Detection follows
-`tests/parsers.py::detect_user_supplied_spec` exactly:
-
-- Length ≥ 1500 chars, AND
-- Contains ≥2 of the headers (case-sensitive, exact substring): `## Summary`,
-  `## Acceptance criteria`, `## Out of scope`
-
-If detected, present:
-
-> Treating your input as the 1a-spec — skipping Step 1a (saves ~$0.26 of derivation
-> work that 1a would have largely just verified). Reply `run 1a` to override.
-
-If the user replies `run 1a` (case-insensitive, leading/trailing whitespace ignored),
-discard the detection and fall through to the resume check below. Otherwise:
-
-1. Write the user's request body verbatim to `.claude/tmp/1a-spec.md` (overwriting any
-   prior file — the user's fresh spec is authoritative; the resume check is bypassed).
-2. Skip the architect-agent launch + clarification loop below.
-3. Record a passthrough entry in `TOKEN_LEDGER` (step=`1a:passthrough`,
-   agent=`orchestrator`, model=`—`, total_tokens=0, dur_ms=0) for ledger continuity.
-4. Proceed directly to Step 1b.
-
-Detection is intentionally conservative — false positives (skipping 1a when needed)
-are worse than false negatives (running 1a unnecessarily). The override path
-guarantees the user can always force normal 1a execution. Do NOT invent permissive
-header variants; follow the parser's exact header list.
-
-**Resume check (only if passthrough did not fire):**
-
-Check whether `.claude/tmp/1a-spec.md` already exists from a prior run. If it does,
-ask the user: "A previous 1a analysis exists — resume from it or start fresh?"
-
-- **Resume** → skip the agent launch and proceed directly to Step 1b with the existing spec.
-- **Start fresh** → delete `.claude/tmp/1a-spec.md` and run Step 1a normally below.
-
-**Launch the architect-agent in 1a mode:**
-
-```
-Agent: architect-agent
-Model: sonnet
-Prompt: |
-  MODE: 1a — Analysis & Clarification
-
-  Read `.claude/skills/architect-analyzer/SKILL.md` for your instructions.
-  Do NOT enter plan mode — you will need to write the enriched spec file.
-
-  TECH STACK CONTEXT:
-  <paste each STACK_REGISTRY stack's architect-overlay.md under "## <Stack> Architecture Context";
-   append cross-cutting overlays under "## Cross-Cutting: <name> Context";
-   append local overlays for the architect role per Step 0.2 matrix (skip empty)>
-
-  STACK MAPPING (for awareness during analysis):
-  <for each stack, list its stack_paths patterns, e.g.:
-   - react: src/frontend/**
-   - python: src/backend/**
-   - bicep: infra/**>
-
-  USER REQUEST:
-  "<user's request verbatim>"
-
-  CODEBASE CONTEXT (ORCHESTRATOR.md 1a extract — do not re-read from disk):
-  <paste 1a Extract from Step 0.7>
-```
-
-**Clarification loop:**
-- The 1a agent will output a structured analysis followed by grouped clarifying questions.
-- Present the questions to the user verbatim.
-- Feed user answers back via **SendMessage** to the same agent (do NOT launch a new agent).
-- Repeat until either:
-  - The agent outputs `CLARIFICATION COMPLETE` and writes `.claude/tmp/1a-spec.md`, or
-  - The user explicitly says "proceed" or "good enough"
-- If the user says proceed before the agent signals complete, instruct the agent via SendMessage to finalize the spec with the information gathered so far.
-
-**Round cap (cost guardrail):** Soft-cap at **2 SendMessage rounds** beyond the initial
-launch. Before sending a 3rd round, check whether the new questions are sub-questions on
-topics already asked (vs. introducing new decision points). If they are sub-questions,
-prompt the user: "The architect has follow-up questions on topics already covered — proceed
-with current understanding or continue clarifying? (proceed | continue)". Respect the
-user's choice. If new topics, allow the round but cap cumulative 1a tokens at ~150K total
-(input + output across all 1a entries in `TOKEN_LEDGER`). On hitting the token cap,
-SendMessage `FINALIZE NOW` and force the agent to write the spec with current information.
-
-**Token tracking:** Per Step 0.6 — record one entry for the initial launch (step `1a`) and one per clarification SendMessage (step `1a:clarify-N`). agent=`architect-agent`, model=`sonnet`.
-
-**TOKEN_LEDGER gate:** After Step 1a completes and `.claude/tmp/1a-spec.md` is written,
-verify that `TOKEN_LEDGER` contains at least one entry. If the ledger is empty, warn the user:
-
-> ⚠ TOKEN_LEDGER is empty after Step 1a — token tracking was skipped. Step 5 analysis
-> will reconstruct from `<usage>` blocks with reduced accuracy.
-
-Do NOT abort the pipeline. Continue with implementation but note the tracking gap.
-
-**Recovery:** If the pipeline is interrupted after 1a and `.claude/tmp/1a-spec.md` exists, skip 1a entirely and go directly to 1b. If `.claude/tmp/1b-plan.md` also exists, skip both 1a and 1b — present the saved plan to the user for confirmation and proceed to Step 1.5.
-
----
+**Extracted to `steps/1a-clarify.md`.** Read that file before executing this step. Front-matter: `requires=[]`, `produces=[.claude/tmp/1a-spec.md]`, `sendmessage=required`.
 
 ### Step 1b: PLAN
 
@@ -655,112 +572,7 @@ would dilute Haiku's signal-to-noise ratio.
 
 ### Step 2.1: REVIEW
 
-To reduce repeated context, reuse a single code-reviewer agent within each wave via
-**SendMessage** instead of launching a fresh agent per task.
-
-**Reviewer model selection:** Default to **Sonnet**. Use **Haiku** only when ALL of
-these conditions hold (the micro-plan rule):
-
-1. The plan contains exactly **one wave** (read the wave count from `1b-plan.md` — not
-   just "this is the first wave", but "there is only one wave total").
-2. Every task brief in the plan is **< 3,000 chars** (check the `TASK CONTEXT BRIEF`
-   field for each task in `1b-plan.md`).
-3. This is the **initial review pass** for the wave — not a re-review after a fix
-   (Step 2.2 re-reviews always use Sonnet regardless of plan size).
-
-**Why:** On a single-wave micro-plan with small briefs, Sonnet reviewer cost
-(~$0.046/call) is 10–15× the Haiku implementer cost (~$0.003/call). A Haiku reviewer
-catching syntax, type, and obvious logic errors brings the ratio back toward parity.
-The Sonnet reviewer remains available for escalation if Haiku returns FAIL: the
-Step 2.2 fix cycle always re-reviews with Sonnet (see below), so quality is not
-sacrificed — the Haiku pass just filters the easy cases cheaply.
-
-If the Haiku reviewer returns FAIL, route to Step 2.2 as normal. The re-review after
-the fix (Step 2.2 completion) uses Sonnet unconditionally.
-
-**Token tracking note:** When Haiku is selected, record `model: haiku` in the
-TOKEN_LEDGER entry for this review (step `2.1:<task_id>`).
-
-**Wave-level broken-head annotation** — before composing the reviewer prompt, scan the
-current wave's header in `.claude/tmp/1b-plan.md` for an italic metadata line in the form
-`*Broken head expected: <reason> — repaired by Wave <N>.*`. The planner emits this when
-a sequential split intentionally leaves a broken intermediate state (see
-`architect-planner/SKILL.md` "Broken-Head Split Detection"). If present, capture
-`<reason>` and `<N>` for injection into the reviewer prompt below; otherwise omit the
-`BROKEN HEAD ANNOTATION:` block entirely. The annotation lives only on the first review
-of the wave — subsequent SendMessage reviews already have it in context.
-
-Use the regex specified by `tests/parsers.py::parse_broken_head_annotation` (literal
-em-dash `—`, italic markers required, trailing period before `*`) — do not invent a
-permissive variant; failing-closed (no annotation detected) is preferable to a parser
-mismatch that drops the `BROKEN HEAD ANNOTATION:` block silently.
-
-**First review in a wave** — determine which stacks appear in the wave's tasks, then
-launch a new code-reviewer agent with those stacks' reviewer overlays:
-
-```
-Agent: code-reviewer-agent
-Model: <sonnet (default) or haiku (micro-plan rule above)>
-Prompt: |
-  You are being launched by the orchestration pipeline.
-  Use the PASS/FAIL output protocol from your agent definition.
-  Append a TOKEN_REPORT block after your output.
-
-  You will review multiple tasks in this wave. Each review is independent — when
-  you receive a "NEW REVIEW" message, discard all prior review context and review
-  ONLY the new changes presented.
-
-  TECH STACK REVIEW RULES:
-  <for each unique stack in this wave's tasks, paste its reviewer-overlay.md under "## <Stack> Review Rules" (apply only to matching files);
-   append cross-cutting overlays under "## Cross-Cutting: <name> Review Rules";
-   append local overlays for the reviewer role per Step 0.2 matrix (skip empty)>
-
-  [Inject ONLY if the wave is broken-head-annotated; otherwise omit this block entirely:]
-  BROKEN HEAD ANNOTATION:
-  This wave's commit intentionally leaves the codebase in a broken intermediate state.
-  Reason: <reason captured above>
-  Repaired by: Wave <N>
-
-  Distinguish findings that match the documented breakage (e.g., callers passing the old
-  signature, undefined consumers of a renamed symbol, missing imports for a moved file)
-  from unrelated findings. Emit matching findings as `PASS` with a `--- BROKEN-HEAD NOTES ---`
-  divider and a one-line note per finding — do NOT `FAIL` the review for them. Apply
-  normal `PASS`/`FAIL` logic to unrelated findings.
-
-  REVIEW THESE CHANGES:
-
-  <list the files the implementer created/modified>
-```
-
-**Subsequent reviews in the same wave** — use SendMessage to the same agent:
-
-```
-SendMessage to: <reviewer agent from first review>
-Message: |
-  NEW REVIEW — discard all prior review context. Review ONLY the following changes.
-
-  REVIEW THESE CHANGES:
-
-  <list the files the next implementer created/modified>
-```
-
-**Cap at 4 reviews per agent.** If a wave has more than 4 tasks, launch a fresh reviewer
-agent for tasks 5+. This prevents context window saturation from accumulated review output —
-empirically, reviewer SendMessage context grows ~50-100% per added review, so the cap is
-aligned with the wave-size cap (≤4 tasks) to keep cumulative growth bounded.
-
-**After each review returns:**
-
-- If `PASS`: proceed to Step 3 (commit)
-- If `FAIL`: proceed to Step 2.2 (fix)
-
-**Backlog classification:** after handling PASS/FAIL, parse the
-`--- OPTIONAL IMPROVEMENTS ---` section. Each entry is tagged `[should-fix]`,
-`[nice-to-have]`, or `[simplify]`. For each, apply the fold-vs-defer rule in
-the Backlog Integration section below. This happens after the pass/fail
-handshake — do not let it block the review cycle.
-
-**Token tracking:** Per Step 0.6 — one entry per review (step `2.1:<task_id>`). agent=`code-reviewer-agent`, model=`sonnet`/`haiku` per micro-plan rule above. For SendMessage reviews, `input_chars` is the SendMessage content only.
+**Extracted to `steps/2.1-review.md`.** Read that file before executing this step. Front-matter: `requires=[.claude/tmp/1b-plan.md]`, `produces=[]`, `sendmessage=required`.
 
 ### Step 2.2: FIX
 
@@ -892,193 +704,7 @@ for UX, copy, and business-rule edge cases.
 
 ### Step 3.5: MANUAL TEST
 
-After all implementation is committed and pushed, prompt the user to test the PR branch:
-
-> "All tasks implemented and pushed to `PR_BRANCH`. Please test the branch and report
-> any bugs found, or say **tests pass** to finalize the PR."
-
-**If the user says "tests pass":** proceed to Step 4.
-
-**For each bug reported, run this cycle:**
-
-**Parallel bug fixes:** When the user reports multiple bugs at once, group them by independence:
-- **Independent bugs** have non-overlapping file sets (no shared files to modify). These can be
-  fixed in parallel using worktree isolation (same pattern as Step 2 parallel tasks).
-- **Dependent bugs** share files or have causal relationships. These must be fixed sequentially.
-
-To parallelize: run Step 3.5.1 (ASSESS) for all bugs first. After assessment, identify which
-bugs have non-overlapping FILES TO MODIFY lists. Launch parallel implementer agents (with
-worktree isolation) for independent bugs. Review them using the shared bug-fix reviewer agent
-via SendMessage. Commit in assessment order (not completion order) for deterministic history.
-
-If the user reports bugs one at a time (interactive), process them sequentially as before.
-
-#### 3.5.1: ASSESS
-
-The orchestrator assesses each bug — do NOT delegate this to a subagent:
-
-1. **Correlate** the bug to the task(s) and file(s) from the plan.
-2. **Check fragile areas:** Cross-reference affected files against ORCHESTRATOR.md's
-   "Known Fragile Areas". If the bug touches a fragile area, note the specific concern.
-3. **Classify the fix:**
-   - **Simple** (single file, clear cause, no fragile areas): proceed directly to 3.5.2.
-   - **Complex** (crosses task boundaries, touches fragile areas, or cause is unclear):
-     launch a Sonnet architect-agent for blast-radius analysis before fixing.
-
-**Blast-radius analysis prompt (complex bugs only):**
-
-```
-Agent: architect-agent
-Model: sonnet
-Prompt: |
-  MODE: blast-radius analysis
-
-  Read `.claude/skills/architect-analyzer/SKILL.md` for your analysis approach.
-  Do NOT enter plan mode — you may need to read code files.
-
-  TECH STACK CONTEXT:
-  <paste each STACK_REGISTRY stack's architect-overlay.md under "## <Stack> Architecture Context";
-   append cross-cutting overlays;
-   append local overlays for the architect role per Step 0.2 matrix (skip empty)>
-
-  A bug was found during manual testing of a feature implementation. Assess the
-  blast radius of fixing this bug and recommend a fix approach.
-
-  BUG REPORT:
-  "<user's bug report verbatim>"
-
-  FILES MODIFIED BY THE IMPLEMENTATION:
-  <list all files modified across all tasks>
-
-  ORIGINAL PLAN SUMMARY:
-  <paste the plan overview — waves and task names, not full briefs>
-
-  CODEBASE CONTEXT (ORCHESTRATOR.md 3.5 extract — do not re-read from disk):
-  <paste 3.5 Extract from Step 0.7>
-
-  Respond with EXACTLY these 6 fields, each capped to keep the response bounded.
-  Do NOT add prose outside these fields. Total response should fit in ~200 words.
-  1. ROOT CAUSE (1-3 sentences): Which file(s) and task(s) likely caused this
-  2. BLAST RADIUS (1-3 sentences): What other files/behaviors could be affected by a fix
-  3. FRAGILE AREAS (1-3 sentences, or `none` if no overlap): Any Known Fragile Areas
-     in the blast radius
-  4. FIX APPROACH (1-3 sentences): Specific fix strategy
-  5. FILES TO MODIFY (bullet list, paths only — no prose)
-  6. REGRESSION RISK (one line): Low/Medium/High with one-sentence justification
-```
-
-#### 3.5.2: FIX
-
-Launch an implementer agent to fix the bug:
-
-```
-Agent: implementer-agent
-Model: sonnet
-Prompt: |
-  You are being launched by the orchestration pipeline to fix a bug found
-  during manual testing. Follow all rules from your agent definition.
-
-  IMPORTANT: After fixing, run the FULL test suite (all targets), not just
-  the modified files. The total passing test count must be >= BASELINE_COUNT.
-  If it drops, your fix introduced a regression — find and fix it before
-  returning SUCCESS.
-
-  Test baseline: BASELINE_COUNT passing tests.
-
-  TECH STACK RULES:
-  <resolve stack via resolve_stack() on affected files, paste STACK_REGISTRY[<resolved_stack>].implementer overlay (full);
-   append cross-cutting overlays;
-   append local overlays for the implementer role per Step 0.2 matrix (skip empty)>
-
-  BUILD COMMAND: python3 .claude/scripts/<resolved_stack>/build.py
-  TEST COMMAND: python3 .claude/scripts/<resolved_stack>/test.py
-
-  BUG REPORT:
-  "<user's bug report>"
-
-  FIX APPROACH:
-  <if complex: paste architect's fix approach from 3.5.1>
-  <if simple: orchestrator's own assessment>
-
-  FILES TO MODIFY:
-  <file list>
-
-  ORIGINAL CONTEXT BRIEF (for reference):
-  <paste the original context brief for the affected task>
-```
-
-#### 3.5.3: REVIEW
-
-**Reviewer reuse:** Use the same SendMessage pattern as Step 2.1 wave reviews to avoid
-re-ingesting the agent definition and overlays for each bug-fix review. Launch ONE
-code-reviewer agent for the first bug-fix review, then reuse it via SendMessage for subsequent
-bug-fix reviews in the same manual test round.
-
-**First bug-fix review** — launch a fresh reviewer:
-
-```
-Agent: code-reviewer-agent
-Model: sonnet
-Prompt: |
-  You are being launched by the orchestration pipeline.
-  Use the PASS/FAIL output protocol from your agent definition.
-
-  TECH STACK REVIEW RULES:
-  <resolve stack via resolve_stack() on affected files, paste STACK_REGISTRY[<resolved_stack>].reviewer overlay under "## <Stack> Review Rules";
-   append cross-cutting overlays;
-   append local overlays for the reviewer role per Step 0.2 matrix (skip empty)>
-
-  This is a BUG FIX review. In addition to your standard checks, explicitly verify:
-  - The fix does not revert or contradict the original implementation's intent
-  - The fix does not introduce regressions in adjacent functionality
-  - The test count has not decreased from the baseline
-
-  REVIEW THESE CHANGES:
-
-  <list the files the fix agent modified>
-```
-
-**Subsequent bug-fix reviews** — reuse the same agent via SendMessage:
-
-```
-SendMessage to: <bug-fix reviewer agent from first review>
-Message: |
-  NEW REVIEW — discard all prior review context. Review ONLY the following changes.
-  This is a BUG FIX review (same explicit checks as the first review above).
-
-  REVIEW THESE CHANGES:
-
-  <list the files the fix agent modified>
-```
-
-**Cap at 4 reviews per agent** (same as wave reviews). If a manual test round produces more
-than 4 bug-fix reviews, launch a fresh reviewer for reviews 5+. The cap matches Step 2.1
-to bound SendMessage context drift (empirically ~50-100% growth per added review).
-
-**Token tracking:** Per Step 0.6 — one entry per bug-fix sub-step:
-- `3.5:assess:<bug_id>` — `architect-agent`, `sonnet` (only if blast-radius triggered)
-- `3.5:fix:<bug_id>` — `implementer-agent`, `sonnet`, `is_retry=true`
-- `3.5:review:<bug_id>` — `code-reviewer-agent`, `sonnet` (SendMessage `input_chars` is the message content only)
-
-#### 3.5.4: COMMIT + PUSH
-
-Same as Step 3, but commit messages use `fix(scope):` type prefix.
-
-#### 3.5.5: RE-TEST
-
-Prompt the user to re-test:
-
-> "Bug fix committed and pushed. Please re-test and report any remaining issues,
-> or say **tests pass** to finalize."
-
-**Regression guards:**
-- If the fix agent's test run shows the total passing count dropped below `BASELINE_COUNT`,
-  the fix MUST be rejected — report to user, do not commit.
-- If a fix fails review (Step 3.5.3) twice, stop and launch the architect for
-  blast-radius analysis (if not already done), then present the analysis to the user.
-- Maximum 3 bug-fix cycles per manual test round. After that, stop and report all
-  outstanding issues to the user for manual triage.
-- `BASELINE_COUNT` is updated after each successful fix commit (ratchets up, never down).
+**Extracted to `steps/3.5-manual-test.md`.** Read that file before executing this step. Front-matter: `requires=[.claude/tmp/1b-plan.md]`, `produces=[]`, `sendmessage=required`.
 
 ### Step 4: FINALIZE
 
@@ -1342,3 +968,16 @@ If the session is interrupted mid-pipeline:
 5. The architect's plan (if saved) shows which tasks remain
 6. Resume from the first incomplete task in the plan
 7. Unchecked items in the PR body show remaining work
+
+### Resume dispatch matrix (artifact-driven)
+
+The orchestrator dispatches to a step based on which `.claude/tmp/` artifacts exist on resume. Cases are evaluated top to bottom; first match wins.
+
+| State | Action |
+|-------|--------|
+| Only `1a-spec.md` present | Resume from Step 1b (use existing spec). |
+| `1a-spec.md` AND `1b-plan.md` present | Resume from Step 1.4 (pre-flight build); plan is authoritative. |
+| Only `1b-plan.md` present (no `1a-spec.md`) | **Illegal state** — fail loudly. The plan was written without a spec; treat as corrupt. Tell the user: "Recovery artifact `1b-plan.md` exists without `1a-spec.md`. This should not happen. Delete `.claude/tmp/1b-plan.md` and rerun, or restore `1a-spec.md` from your last `/orchestrate` run." Do not proceed. |
+| Neither present | Start fresh from Step 1a. |
+
+If both `1a-spec.md` and `1b-plan.md` are present and the user wants to discard one, instruct them to delete the relevant file in `.claude/tmp/` before rerunning `/orchestrate`. The orchestrator never deletes recovery artifacts on its own.

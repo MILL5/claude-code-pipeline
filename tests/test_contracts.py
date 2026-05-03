@@ -23,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from parsers import (
     parse_azure_auth_output,
+    parse_broken_head_annotation,
     parse_build_output,
     parse_cost_estimate_output,
     parse_defect_report,
@@ -152,6 +153,78 @@ class TestReviewerProtocol(unittest.TestCase):
         for entry in result["optional_improvements"]:
             self.assertIn("tag", entry)
             self.assertIn("text", entry)
+
+    def test_pass_with_broken_head_notes(self) -> None:
+        fixture = (FIXTURES_DIR / "reviewer-pass-with-broken-head-notes.txt").read_text()
+        result = parse_reviewer_result(fixture)
+        self.assertEqual(result["status"], "PASS")
+        self.assertEqual(result["suggestions"], [])
+        notes = result["broken_head_notes"]
+        self.assertEqual(len(notes), 2)
+        self.assertIn("Optimizer.run()", notes[0])
+        self.assertIn("Wave 4b", notes[0])
+        self.assertNotIn("---", notes[0])
+
+    def test_pass_without_broken_head_notes(self) -> None:
+        fixture = (FIXTURES_DIR / "reviewer-pass.txt").read_text()
+        result = parse_reviewer_result(fixture)
+        self.assertEqual(result["broken_head_notes"], [])
+
+    def test_fail_with_broken_head_notes(self) -> None:
+        fixture = (FIXTURES_DIR / "reviewer-fail-with-broken-head-notes.txt").read_text()
+        result = parse_reviewer_result(fixture)
+        self.assertEqual(result["status"], "FAIL")
+        self.assertEqual(len(result["issues"]), 1)
+        self.assertEqual(result["issues"][0]["severity"], "CRITICAL")
+        self.assertIn("Race condition", result["issues"][0]["problem"])
+        self.assertEqual(len(result["optional_improvements"]), 2)
+        tags = {entry["tag"] for entry in result["optional_improvements"]}
+        self.assertEqual(tags, {"should-fix", "nice-to-have"})
+        notes = result["broken_head_notes"]
+        self.assertEqual(len(notes), 2)
+        self.assertIn("Optimizer.run()", notes[0])
+        self.assertIn("Wave 4b", notes[1])
+        for note in notes:
+            self.assertNotIn("---", note)
+
+
+class TestBrokenHeadAnnotation(unittest.TestCase):
+    def test_extracts_reason_and_repaired_by(self) -> None:
+        wave_block = (
+            "### Wave 4a: Update optimizer signature\n"
+            "*Tasks in this wave have no inter-dependencies and can execute in parallel.*\n"
+            "*Broken head expected: signature change to Optimizer.run() ships before "
+            "callers update — repaired by Wave 4b.*\n"
+            "\n"
+            "#### Task 4a.1: ...\n"
+        )
+        result = parse_broken_head_annotation(wave_block)
+        self.assertIsNotNone(result)
+        self.assertIn("Optimizer.run()", result["reason"])
+        self.assertEqual(result["repaired_by"], "4b")
+
+    def test_returns_none_when_absent(self) -> None:
+        wave_block = (
+            "### Wave 1: Initial setup\n"
+            "*Tasks in this wave have no inter-dependencies and can execute in parallel.*\n"
+            "\n"
+            "#### Task 1.1: ...\n"
+        )
+        self.assertIsNone(parse_broken_head_annotation(wave_block))
+
+    def test_returns_none_for_malformed(self) -> None:
+        # Missing "repaired by Wave N" suffix
+        wave_block = "*Broken head expected: something is broken.*"
+        self.assertIsNone(parse_broken_head_annotation(wave_block))
+        # Missing italic markers
+        wave_block = "Broken head expected: something — repaired by Wave 2."
+        self.assertIsNone(parse_broken_head_annotation(wave_block))
+
+    def test_handles_numeric_wave_id(self) -> None:
+        wave_block = "*Broken head expected: signature drift — repaired by Wave 5.*"
+        result = parse_broken_head_annotation(wave_block)
+        self.assertIsNotNone(result)
+        self.assertEqual(result["repaired_by"], "5")
 
 
 class TestBuildOutput(unittest.TestCase):

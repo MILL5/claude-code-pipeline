@@ -78,7 +78,12 @@ def _parse_optional_entry(raw: str) -> dict:
 
 
 def parse_reviewer_result(output: str) -> dict:
-    """Parse code-reviewer agent output per the documented protocol."""
+    """Parse code-reviewer agent output per the documented protocol.
+
+    Recognizes optional `--- BROKEN-HEAD NOTES ---` divider in both PASS and FAIL
+    paths (emitted when the wave is broken-head-annotated; see code-reviewer-agent.md
+    "Broken-Head Pass-Through"). Collected lines are returned in `broken_head_notes`.
+    """
     lines = output.strip().split("\n")
     if not lines:
         return {"status": "UNKNOWN", "error": "empty output"}
@@ -86,19 +91,36 @@ def parse_reviewer_result(output: str) -> dict:
     first_line = lines[0].strip()
     if first_line == "PASS":
         suggestions: list[dict] = []
+        broken_head_notes: list[str] = []
+        in_broken_head = False
         for line in lines[1:]:
             stripped = line.strip()
             if stripped.startswith("---TOKEN_REPORT---"):
                 break
-            if stripped:
+            if stripped == "--- BROKEN-HEAD NOTES ---":
+                in_broken_head = True
+                continue
+            if not stripped:
+                continue
+            if in_broken_head:
+                note = stripped.lstrip("- ").strip()
+                if note:
+                    broken_head_notes.append(note)
+            else:
                 suggestions.append(_parse_optional_entry(stripped))
-        return {"status": "PASS", "suggestions": suggestions}
+        return {
+            "status": "PASS",
+            "suggestions": suggestions,
+            "broken_head_notes": broken_head_notes,
+        }
 
     elif first_line == "FAIL":
         issues: list[dict] = []
         current_issue: dict = {}
         optional_improvements: list[dict] = []
+        broken_head_notes = []
         in_optional = False
+        in_broken_head = False
         for line in lines[1:]:
             stripped = line.strip()
             if stripped.startswith("---TOKEN_REPORT---"):
@@ -108,6 +130,20 @@ def parse_reviewer_result(output: str) -> dict:
                     issues.append(current_issue)
                     current_issue = {}
                 in_optional = True
+                in_broken_head = False
+                continue
+            if stripped == "--- BROKEN-HEAD NOTES ---":
+                if current_issue:
+                    issues.append(current_issue)
+                    current_issue = {}
+                in_broken_head = True
+                in_optional = False
+                continue
+            if in_broken_head:
+                if stripped:
+                    note = stripped.lstrip("- ").strip()
+                    if note:
+                        broken_head_notes.append(note)
                 continue
             if in_optional:
                 if stripped:
@@ -131,6 +167,7 @@ def parse_reviewer_result(output: str) -> dict:
             "status": "FAIL",
             "issues": issues,
             "optional_improvements": optional_improvements,
+            "broken_head_notes": broken_head_notes,
         }
     else:
         return {"status": "UNKNOWN", "error": f"unexpected first line: {first_line}"}
@@ -312,6 +349,30 @@ def parse_plan_stub(output: str) -> dict | None:
                 pass
 
     return result
+
+
+def parse_broken_head_annotation(wave_block: str) -> dict | None:
+    """Extract the broken-head annotation from a wave header block in 1b-plan.md.
+
+    The planner emits this italic metadata line below the wave description when
+    a sequential split intentionally leaves a broken intermediate state (see
+    `skills/architect-planner/SKILL.md` "Broken-Head Split Detection"):
+
+        *Broken head expected: <reason> — repaired by Wave <N>.*
+
+    Returns {"reason": str, "repaired_by": str} or None if no annotation found.
+    """
+    match = re.search(
+        r'^\*Broken head expected:\s*(.+?)\s*—\s*repaired by Wave\s+(\S+?)\.\*\s*$',
+        wave_block,
+        re.MULTILINE,
+    )
+    if not match:
+        return None
+    return {
+        "reason": match.group(1).strip(),
+        "repaired_by": match.group(2).strip(),
+    }
 
 
 # --- Defect Report Parsing ---

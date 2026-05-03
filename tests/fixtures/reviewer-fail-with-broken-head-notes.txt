@@ -1,0 +1,19 @@
+FAIL
+ISSUE: CRITICAL
+FILE: src/scheduler.py
+LINE: 89
+PROBLEM: Race condition in async batch job — concurrent writes to shared state cache
+FIX: Wrap the cache mutation in an asyncio.Lock or use a thread-safe map type
+
+--- OPTIONAL IMPROVEMENTS ---
+[should-fix] Cache eviction policy unbounded — risk of growth: cap to N entries with LRU
+[nice-to-have] Logger uses f-strings; project convention is structured logging via `extra=` kwargs
+
+--- BROKEN-HEAD NOTES ---
+- src/scheduler.py:142 — Optimizer.run() callers still pass old args; will be repaired in Wave 4b
+- src/scheduler.py:178 — import of OldConfig type still resolved against the pre-rename symbol; consumer update slated for Wave 4b
+
+---TOKEN_REPORT---
+FILES_READ: src/scheduler.py ~2400; src/optimizer.py ~3200
+TOOL_CALLS: Read=3 Grep=2
+---END_TOKEN_REPORT---

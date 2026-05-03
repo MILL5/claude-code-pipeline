@@ -166,6 +166,49 @@ missing dependency injection, untestable architecture, tight coupling between la
 suggestions for future improvements, naming bikeshedding, SOLID "purity" concerns
 that don't create concrete risk (e.g., a small script that doesn't need DIP).
 
+### Broken-Head Pass-Through
+
+If the orchestrator's prompt includes a `BROKEN HEAD ANNOTATION:` block, the wave
+under review intentionally leaves the codebase in a broken intermediate state — a
+sequential split where the consumer-side update lives in a later wave (see the
+planner skill's "Broken-Head Split Detection" section). When the annotation is
+present:
+
+- **Pass-through findings that match the documented breakage** (callers using the
+  old signature, undefined consumers of a renamed symbol, missing imports for a
+  moved file — the annotation's `Reason:` field names the shape). Emit these as
+  `PASS` with a `--- BROKEN-HEAD NOTES ---` divider and one line per finding:
+
+  ```
+  PASS
+
+  --- BROKEN-HEAD NOTES ---
+  - <file>:<line> — <description; will be repaired in Wave N>
+  ```
+
+  **Match test** — a finding qualifies as broken-head only when **both** hold:
+  1. The symptom is one of: undefined symbol, missing import, type mismatch at a
+     call site, signature mismatch, or unresolved reference to a renamed/moved/
+     removed identifier.
+  2. The affected file or the specific symbol named in the finding is referenced
+     in the annotation's `Reason:` field, OR the affected file is a downstream
+     consumer of a symbol named in `Reason:` (e.g., `Reason:` mentions
+     `Optimizer.run()`; the finding is in a file that imports `Optimizer`).
+
+  If either condition fails — or condition 2 cannot be determined from the
+  reviewed diff alone — **FAIL the finding per normal protocol**. Pass-through is
+  reserved for breakage the planner explicitly flagged; unrelated symptoms must
+  not slip through under cover of a partial match.
+
+- **Apply normal `PASS`/`FAIL` logic to unrelated findings.** A real CRITICAL/HIGH
+  bug that has nothing to do with the broken head still produces `FAIL`. In that
+  case, list the broken-head findings under a `--- BROKEN-HEAD NOTES ---` divider
+  after the OPTIONAL IMPROVEMENTS section.
+
+- **No annotation, no pass-through.** Without a `BROKEN HEAD ANNOTATION:` block,
+  broken-integration symptoms are real bugs — `FAIL` per normal protocol. Never
+  invent a pass-through reason yourself.
+
 ### Protocol Guard
 
 The Pipeline Mode protocol above is the ONLY supported output format. **If your first line

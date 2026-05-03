@@ -1013,8 +1013,9 @@ Message: |
   <list the files the fix agent modified>
 ```
 
-**Cap at 8 reviews per agent** (same as wave reviews). If a manual test round produces more
-than 8 bug-fix reviews, launch a fresh reviewer for reviews 9+.
+**Cap at 4 reviews per agent** (same as wave reviews). If a manual test round produces more
+than 4 bug-fix reviews, launch a fresh reviewer for reviews 5+. The cap matches Step 2.1
+to bound SendMessage context drift (empirically ~50-100% growth per added review).
 
 **Token tracking:** Per Step 0.6 — one entry per bug-fix sub-step:
 - `3.5:assess:<bug_id>` — `architect-agent`, `sonnet` (only if blast-radius triggered)

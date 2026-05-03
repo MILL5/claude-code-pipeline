@@ -776,10 +776,10 @@ def check_orchestrate_reviewer_reuse(result: ValidationResult) -> None:
     else:
         result.fail("Orchestrate missing reviewer reuse (SendMessage + NEW REVIEW)")
 
-    if "Cap at 8 reviews" in content or ("cap" in content.lower() and "8 reviews" in content.lower()):
-        result.ok("Orchestrate documents 8-review cap per reviewer agent")
+    if "Cap at 4 reviews" in content or ("cap" in content.lower() and "4 reviews" in content.lower()):
+        result.ok("Orchestrate documents 4-review cap per reviewer agent")
     else:
-        result.fail("Orchestrate missing 8-review cap documentation")
+        result.fail("Orchestrate missing 4-review cap documentation")
 
 
 def check_init_script(result: ValidationResult) -> None:

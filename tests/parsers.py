@@ -351,6 +351,32 @@ def parse_plan_stub(output: str) -> dict | None:
     return result
 
 
+SPEC_HEADERS = ("## Summary", "## Acceptance criteria", "## Out of scope")
+SPEC_MIN_LENGTH = 1500
+SPEC_MIN_HEADER_MATCHES = 2
+
+
+def detect_user_supplied_spec(user_input: str) -> bool:
+    """Detect whether a /orchestrate request body is structurally a near-complete spec.
+
+    The orchestrator uses this to decide whether to skip Step 1a entirely (passing
+    the user's input directly to `tmp/1a-spec.md`) or run the analyzer normally.
+
+    Returns True only when BOTH conditions hold:
+    - Length ≥ 1500 chars (briefer requests are not specs)
+    - Contains ≥2 of the documented spec section headers (case-sensitive, exact
+      substring match): `## Summary`, `## Acceptance criteria`, `## Out of scope`
+
+    Conservative by design — false positives (skipping 1a when 1a was needed) are
+    worse than false negatives (running 1a when the user could have skipped). The
+    user override (`run 1a` reply) covers the rare false-positive case.
+    """
+    if len(user_input) < SPEC_MIN_LENGTH:
+        return False
+    matches = sum(1 for header in SPEC_HEADERS if header in user_input)
+    return matches >= SPEC_MIN_HEADER_MATCHES
+
+
 def parse_broken_head_annotation(wave_block: str) -> dict | None:
     """Extract the broken-head annotation from a wave header block in 1b-plan.md.
 

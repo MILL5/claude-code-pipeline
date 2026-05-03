@@ -341,6 +341,36 @@ the user whether to proceed without codebase context or update ORCHESTRATOR.md f
 3. Check ORCHESTRATOR.md "Current State" — note the last known build/test status and date. If the last recorded status is older than the most recent commit, recommend the user run a build/test pass before planning.
 4. Check whether `.claude/tmp/1a-spec.md` already exists. If it does, ask the user: "A previous 1a analysis exists — resume from it or start fresh?"
 
+**1a passthrough detection (orchestrator, before launching the agent):**
+
+Check whether the user's `/orchestrate` request body is structurally a near-complete
+spec — i.e., the user supplied a detailed plan (e.g., an existing `OPTIMIZATION_PLAN.md`)
+rather than a brief request. Detection follows
+`tests/parsers.py::detect_user_supplied_spec` exactly:
+
+- Length ≥ 1500 chars, AND
+- Contains ≥2 of the headers (case-sensitive, exact substring): `## Summary`,
+  `## Acceptance criteria`, `## Out of scope`
+
+If detected, present:
+
+> Treating your input as the 1a-spec — skipping Step 1a (saves ~$0.26 of derivation
+> work that 1a would have largely just verified). Reply `run 1a` to override.
+
+If the user replies `run 1a` (case-insensitive, leading/trailing whitespace ignored),
+discard the detection and proceed with Step 1a normally. Otherwise:
+
+1. Write the user's request body verbatim to `.claude/tmp/1a-spec.md`.
+2. Skip the architect-agent launch + clarification loop below.
+3. Record a passthrough entry in `TOKEN_LEDGER` (step=`1a:passthrough`,
+   agent=`orchestrator`, model=N/A, total_tokens=0, dur_ms=0) for ledger continuity.
+4. Proceed directly to Step 1b.
+
+Detection is intentionally conservative — false positives (skipping 1a when needed)
+are worse than false negatives (running 1a unnecessarily). The override path
+guarantees the user can always force normal 1a execution. Do NOT invent permissive
+header variants; follow the parser's exact header list.
+
 **Launch the architect-agent in 1a mode:**
 
 ```

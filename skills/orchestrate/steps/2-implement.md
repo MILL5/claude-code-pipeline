@@ -2,7 +2,7 @@
 step: "2"
 requires: []
 produces: []
-sendmessage: optional
+sendmessage: n/a
 ---
 
 # Step 2: IMPLEMENT

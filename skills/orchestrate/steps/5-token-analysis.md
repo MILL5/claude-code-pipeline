@@ -1,6 +1,6 @@
 ---
 step: "5"
-requires: []
+requires: [.claude/tmp/1b-plan.md]
 produces: []
 sendmessage: n/a
 ---
@@ -12,15 +12,19 @@ The orchestrator's residual `SKILL.md` (Step Dispatch table) routes here. Shared
 protocols (SendMessage notes, Step 0.6 token tracking, Backlog Integration) live
 in `SKILL.md` and remain accessible.
 
+The `.claude/tmp/1b-plan.md` artifact is read by the orchestrator in sub-step 5.3
+below to inject planned-vs-actual model assignments into the token-analysis prompt.
+
 Launch token analysis **in the background** concurrently with Step 4 finalization — the
 TOKEN_LEDGER is complete after Step 3.5, so analysis can run while ORCHESTRATOR.md is updated
 and `gh pr ready` runs. Always runs, not skippable.
 
 **5.1 Compute Summary.** Record `PIPELINE_END`. Compute `TOKEN_SUMMARY` from `TOKEN_LEDGER`:
 totals across all entries, per-model breakdown (call count + input/output tokens), per-step
-breakdown by prefix (`1a`, `1b`, `1.5`, `2`, `2.1`, `2.2`, `3.5`), estimated cost (Haiku $1/$5,
-Sonnet $3/$15, Opus $15/$75 per M tokens in/out), actual cost-weighted model distribution vs.
-the 70/20/10 target, and counts of `is_escalation`/`is_retry` entries.
+breakdown by prefix (e.g., `1a`, `1b`, `1.4`, `1.5`, `2`, `2.1`, `2.2`, `3`, `3.4`, `3.5`,
+`4`, `5`), estimated cost (Haiku $1/$5, Sonnet $3/$15, Opus $15/$75 per M tokens in/out),
+actual cost-weighted model distribution vs. the 70/20/10 target, and counts of
+`is_escalation`/`is_retry` entries.
 
 **5.2 Derive Pipeline Repo.** `PIPELINE_REMOTE=$(git -C <pipeline_root> remote get-url origin)`.
 Parse SSH (`git@github.com:owner/repo.git`) or HTTPS (`https://github.com/owner/repo.git`),

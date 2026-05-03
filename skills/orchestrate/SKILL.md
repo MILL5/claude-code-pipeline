@@ -371,7 +371,7 @@ The orchestrator runs the steps below in sequence. Every step is extracted to `s
 
 ### Step 2: IMPLEMENT
 
-**Extracted to `steps/2-implement.md`.** Read that file before executing this step. Front-matter: `requires=[]`, `produces=[]`, `sendmessage=optional`.
+**Extracted to `steps/2-implement.md`.** Read that file before executing this step. Front-matter: `requires=[]`, `produces=[]`, `sendmessage=n/a`.
 
 ### Step 2.1: REVIEW
 
@@ -395,11 +395,11 @@ The orchestrator runs the steps below in sequence. Every step is extracted to `s
 
 ### Step 4: FINALIZE
 
-**Extracted to `steps/4-finalize.md`.** Read that file before executing this step. Front-matter: `requires=[]`, `produces=[]`, `sendmessage=n/a`.
+**Extracted to `steps/4-finalize.md`.** Read that file before executing this step. Front-matter: `requires=[.claude/tmp/run-log.yml]`, `produces=[]`, `sendmessage=n/a`.
 
 ### Step 5: TOKEN ANALYSIS (mandatory)
 
-**Extracted to `steps/5-token-analysis.md`.** Read that file before executing this step. Front-matter: `requires=[]`, `produces=[]`, `sendmessage=n/a`.
+**Extracted to `steps/5-token-analysis.md`.** Read that file before executing this step. Front-matter: `requires=[.claude/tmp/1b-plan.md]`, `produces=[]`, `sendmessage=n/a`.
 
 ## Backlog Integration
 

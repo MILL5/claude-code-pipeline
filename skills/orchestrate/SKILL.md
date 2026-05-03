@@ -322,7 +322,7 @@ the user whether to proceed without codebase context or update ORCHESTRATOR.md f
 | 1.4 | orchestrator (pre-flight build per stack against base branch) | — | PASS or user-prompted (abort / continue / inject Wave 0) |
 | 1.5 | open-pr skill | — | feature branch + draft PR |
 | 2 | implementer-agent per task (parallel within wave, ≤4 per batch) | Haiku / Sonnet / Opus | SUCCESS + commit msg, or FAILURE |
-| 2.1 | code-reviewer-agent (one per wave, reused via SendMessage, cap 8) | Sonnet | PASS or FAIL + issues |
+| 2.1 | code-reviewer-agent (one per wave, reused via SendMessage, cap 4) | Sonnet | PASS or FAIL + issues |
 | 2.2 | implementer-agent (same worktree, escalates Haiku→Sonnet on fix) | Sonnet | SUCCESS, or FAILURE after ≤2 cycles |
 | 3 | orchestrator (commit verbatim per agent, push, record test baseline) | — | commits on PR branch |
 | 3.4 | chrome-ui-test (conditional: `browser-ui` capability + UI files + MCP loadable) | Sonnet | PASS or routes FAIL into 3.5 cycle |
@@ -437,6 +437,11 @@ Prompt: |
 
   ENRICHED SPEC:
   <paste full contents of .claude/tmp/1a-spec.md>
+
+  EFFICIENCY CONSTRAINT: The 1a-spec was produced by reading the files in its
+  "Files & Services In Scope" section. Use the spec's extracts — do NOT re-read
+  those files end-to-end. If you need additional context, read only the specific
+  line ranges you need.
 
   CODEBASE CONTEXT (ORCHESTRATOR.md 1b extract — do not re-read from disk):
   <paste 1b Extract from Step 0.7>
@@ -675,8 +680,10 @@ Message: |
   <list the files the next implementer created/modified>
 ```
 
-**Cap at 8 reviews per agent.** If a wave has more than 8 tasks, launch a fresh reviewer
-agent for tasks 9+. This prevents context window saturation from accumulated review output.
+**Cap at 4 reviews per agent.** If a wave has more than 4 tasks, launch a fresh reviewer
+agent for tasks 5+. This prevents context window saturation from accumulated review output —
+empirically, reviewer SendMessage context grows ~50-100% per added review, so the cap is
+aligned with the wave-size cap (≤4 tasks) to keep cumulative growth bounded.
 
 **After each review returns:**
 
@@ -1093,7 +1100,13 @@ Use the planner's existing Haiku/Sonnet classification rubric
   → **defer** (file to backlog).
 
 Reviewer guidance:
-- `[should-fix]` entries with Haiku-tier fix are fold candidates.
+- `[should-fix]` entries with Haiku-tier fix:
+  - **Trivial patches (≤5 LOC AND single-file): default-defer.** A fold cycle costs
+    ~$0.30 in implementer tokens; trivial patches are cheaper for the user to capture
+    as a follow-up commit than to spawn a fold. Surface the deferred entry at PR
+    finalization so the user can choose to fold before merge.
+  - **Non-trivial patches: fold.** Deferring substantial should-fix items pushes
+    context-rebuilding cost onto a future PR.
 - `[nice-to-have]` entries default-defer regardless of tier.
 - `[simplify]` entries are fold candidates by definition (Haiku-tier,
   single-file, behavior-preserving). The reviewer self-attests behavior

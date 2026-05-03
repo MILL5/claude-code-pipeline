@@ -292,9 +292,16 @@ The plan MUST be output as a structured document following this exact format:
 | Haiku | X         | ~X,000            | ~X,000            | $X.XX     |
 | Sonnet| X         | ~X,000            | ~X,000            | $X.XX     |
 | Opus  | X         | ~X,000            | ~X,000            | $X.XX     |
-| **Total** |       |                   |                   | **$X.XX** |
+| **Planned subtotal** | | | | **$X.XX** |
+| Risk uplift (folds + reviewer drift; see heuristic below — omit row when no triggers fire) | | | | +$X.XX |
+| **Estimated actual** | | | | **$X.XX** |
 | *All-Sonnet comparison* | | | | *$X.XX* |
 | *All-Opus comparison*   | | | | *$X.XX* |
+
+**Risk uplift heuristic** — set realistic budget expectations vs. plan-vs-actual cost overruns. Apply the uplift row only when ≥1 trigger condition fires:
+
+- **Folds:** +15% of the implementer subtotal per wave with ≥3 cross-file changes. Folds re-run the implementer at full Sonnet input when the reviewer flags `[should-fix]` items requiring code changes; empirically ~30% of cross-file waves trigger a fold cycle.
+- **Reviewer drift:** +15% of the reviewer cost per wave beyond Wave 1 when reviewer reuse spans waves. Cumulative SendMessage context grows ~50-100% per added review (production runs have observed 4.5× growth from Review 1 → Review 5).
 
 ## Stack Distribution
 | Stack | Task Count | Files |

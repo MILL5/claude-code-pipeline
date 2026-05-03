@@ -170,6 +170,23 @@ class TestReviewerProtocol(unittest.TestCase):
         result = parse_reviewer_result(fixture)
         self.assertEqual(result["broken_head_notes"], [])
 
+    def test_fail_with_broken_head_notes(self) -> None:
+        fixture = (FIXTURES_DIR / "reviewer-fail-with-broken-head-notes.txt").read_text()
+        result = parse_reviewer_result(fixture)
+        self.assertEqual(result["status"], "FAIL")
+        self.assertEqual(len(result["issues"]), 1)
+        self.assertEqual(result["issues"][0]["severity"], "CRITICAL")
+        self.assertIn("Race condition", result["issues"][0]["problem"])
+        self.assertEqual(len(result["optional_improvements"]), 2)
+        tags = {entry["tag"] for entry in result["optional_improvements"]}
+        self.assertEqual(tags, {"should-fix", "nice-to-have"})
+        notes = result["broken_head_notes"]
+        self.assertEqual(len(notes), 2)
+        self.assertIn("Optimizer.run()", notes[0])
+        self.assertIn("Wave 4b", notes[1])
+        for note in notes:
+            self.assertNotIn("---", note)
+
 
 class TestBrokenHeadAnnotation(unittest.TestCase):
     def test_extracts_reason_and_repaired_by(self) -> None:

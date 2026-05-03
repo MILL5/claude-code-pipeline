@@ -186,6 +186,20 @@ present:
   - <file>:<line> — <description; will be repaired in Wave N>
   ```
 
+  **Match test** — a finding qualifies as broken-head only when **both** hold:
+  1. The symptom is one of: undefined symbol, missing import, type mismatch at a
+     call site, signature mismatch, or unresolved reference to a renamed/moved/
+     removed identifier.
+  2. The affected file or the specific symbol named in the finding is referenced
+     in the annotation's `Reason:` field, OR the affected file is a downstream
+     consumer of a symbol named in `Reason:` (e.g., `Reason:` mentions
+     `Optimizer.run()`; the finding is in a file that imports `Optimizer`).
+
+  If either condition fails — or condition 2 cannot be determined from the
+  reviewed diff alone — **FAIL the finding per normal protocol**. Pass-through is
+  reserved for breakage the planner explicitly flagged; unrelated symptoms must
+  not slip through under cover of a partial match.
+
 - **Apply normal `PASS`/`FAIL` logic to unrelated findings.** A real CRITICAL/HIGH
   bug that has nothing to do with the broken head still produces `FAIL`. In that
   case, list the broken-head findings under a `--- BROKEN-HEAD NOTES ---` divider

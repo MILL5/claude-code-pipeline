@@ -652,6 +652,11 @@ a sequential split intentionally leaves a broken intermediate state (see
 `BROKEN HEAD ANNOTATION:` block entirely. The annotation lives only on the first review
 of the wave — subsequent SendMessage reviews already have it in context.
 
+Use the regex specified by `tests/parsers.py::parse_broken_head_annotation` (literal
+em-dash `—`, italic markers required, trailing period before `*`) — do not invent a
+permissive variant; failing-closed (no annotation detected) is preferable to a parser
+mismatch that drops the `BROKEN HEAD ANNOTATION:` block silently.
+
 **First review in a wave** — determine which stacks appear in the wave's tasks, then
 launch a new code-reviewer agent with those stacks' reviewer overlays:
 

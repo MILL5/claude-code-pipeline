@@ -1,30 +1,75 @@
 {
   "adapter": "python",
   "discovery_mode": "steps_dir",
-  "git_sha": "b532edaff7a916819cceffb5bdb515207038ad2e",
+  "git_sha": "7d50454e6533151bf67d616ac2426a5a3d01b208",
   "measurements": {
     "initial_load": {
-      "chars": 56313,
-      "est_tokens": 14078
+      "chars": 39012,
+      "est_tokens": 9753
+    },
+    "step_1.4": {
+      "cumulative_chars": 42310,
+      "delta_chars": 3298,
+      "est_tokens": 10577
+    },
+    "step_1.5": {
+      "cumulative_chars": 43248,
+      "delta_chars": 938,
+      "est_tokens": 10812
     },
     "step_1a": {
-      "cumulative_chars": 62146,
+      "cumulative_chars": 49081,
       "delta_chars": 5833,
-      "est_tokens": 15536
+      "est_tokens": 12270
+    },
+    "step_1b": {
+      "cumulative_chars": 53738,
+      "delta_chars": 4657,
+      "est_tokens": 13434
+    },
+    "step_2": {
+      "cumulative_chars": 57130,
+      "delta_chars": 3392,
+      "est_tokens": 14282
     },
     "step_2.1": {
-      "cumulative_chars": 68156,
+      "cumulative_chars": 63140,
       "delta_chars": 6010,
-      "est_tokens": 17039
+      "est_tokens": 15785
+    },
+    "step_2.2": {
+      "cumulative_chars": 64894,
+      "delta_chars": 1754,
+      "est_tokens": 16223
+    },
+    "step_3": {
+      "cumulative_chars": 66018,
+      "delta_chars": 1124,
+      "est_tokens": 16504
+    },
+    "step_3.4": {
+      "cumulative_chars": 69597,
+      "delta_chars": 3579,
+      "est_tokens": 17399
     },
     "step_3.5": {
-      "cumulative_chars": 76326,
+      "cumulative_chars": 77767,
       "delta_chars": 8170,
-      "est_tokens": 19081
+      "est_tokens": 19441
+    },
+    "step_4": {
+      "cumulative_chars": 79346,
+      "delta_chars": 1579,
+      "est_tokens": 19836
+    },
+    "step_5": {
+      "cumulative_chars": 81709,
+      "delta_chars": 2363,
+      "est_tokens": 20427
     },
     "total": {
-      "chars": 76326,
-      "est_tokens": 19081
+      "chars": 81709,
+      "est_tokens": 20427
     }
   },
   "schema_version": 1

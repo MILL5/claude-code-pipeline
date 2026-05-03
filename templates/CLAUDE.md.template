@@ -10,12 +10,7 @@ Setup: At the start of each session, read `.claude/ORCHESTRATOR.md` for architec
 
 ## Workflow Rules
 
-1. Before writing any code, describe your approach and wait for approval.
-2. If requirements are ambiguous, ask clarifying questions before writing code.
-3. After writing code, list edge cases and suggest test cases.
-4. If a task requires changes to more than 3 files, stop and break it into smaller tasks first.
-5. When there's a bug, start by writing a test that reproduces it, then fix it.
-6. Every time I correct you, reflect on what went wrong and plan to avoid repeating it.
+See agent definitions in `.claude/agents/` for per-role guidance (planning, implementation, review, testing).
 
 ## Build & Test (Mandatory Skills)
 

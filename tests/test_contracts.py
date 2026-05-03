@@ -22,6 +22,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from parsers import (
+    detect_user_supplied_spec,
     parse_azure_auth_output,
     parse_broken_head_annotation,
     parse_build_output,
@@ -225,6 +226,82 @@ class TestBrokenHeadAnnotation(unittest.TestCase):
         result = parse_broken_head_annotation(wave_block)
         self.assertIsNotNone(result)
         self.assertEqual(result["repaired_by"], "5")
+
+
+class TestUserSuppliedSpecDetection(unittest.TestCase):
+    """Step 0 1a-passthrough heuristic — see skills/orchestrate/SKILL.md."""
+
+    def _padded(self, content: str, target_len: int = 1600) -> str:
+        """Pad content to meet the 1500-char minimum without affecting headers."""
+        padding = "\n" + ("Detail line. " * 50)
+        while len(content) < target_len:
+            content += padding
+        return content
+
+    def test_full_match_three_headers(self) -> None:
+        body = self._padded(
+            "## Summary\nFeature does X.\n\n"
+            "## Acceptance criteria\n- [ ] foo\n\n"
+            "## Out of scope\n- bar\n"
+        )
+        self.assertTrue(detect_user_supplied_spec(body))
+
+    def test_minimal_match_two_headers(self) -> None:
+        body = self._padded(
+            "## Summary\nFeature does X.\n\n"
+            "## Acceptance criteria\n- [ ] foo\n"
+        )
+        self.assertTrue(detect_user_supplied_spec(body))
+
+    def test_too_short_rejected(self) -> None:
+        body = (
+            "## Summary\nShort.\n\n"
+            "## Acceptance criteria\n- [ ] foo\n\n"
+            "## Out of scope\n- bar\n"
+        )
+        self.assertLess(len(body), 1500)
+        self.assertFalse(detect_user_supplied_spec(body))
+
+    def test_only_one_header_rejected(self) -> None:
+        body = self._padded("## Summary\nFeature does X.\nOther content here.\n")
+        self.assertFalse(detect_user_supplied_spec(body))
+
+    def test_zero_headers_rejected(self) -> None:
+        body = self._padded("Just a long unstructured description of what to do.\n")
+        self.assertFalse(detect_user_supplied_spec(body))
+
+    def test_empty_input_rejected(self) -> None:
+        self.assertFalse(detect_user_supplied_spec(""))
+
+    def test_case_sensitive_headers(self) -> None:
+        body = self._padded(
+            "## summary\nLowercase header.\n\n"
+            "## acceptance criteria\nLowercase.\n\n"
+            "## out of scope\nLowercase.\n"
+        )
+        self.assertFalse(detect_user_supplied_spec(body))
+
+    def test_partial_header_substring_rejected(self) -> None:
+        # "## Summary" must be present as a literal — "##Summary" without space fails
+        body = self._padded(
+            "##Summary\nMissing space.\n\n"
+            "## Acceptance criteria\nThis one matches.\n"
+        )
+        self.assertFalse(detect_user_supplied_spec(body))
+
+    def test_exactly_minimum_length_accepted(self) -> None:
+        # Body of EXACTLY 1500 chars with 2 headers — boundary on the True side.
+        headers = "## Summary\nFoo.\n\n## Acceptance criteria\nBar.\n"
+        body = headers + ("x" * (1500 - len(headers)))
+        self.assertEqual(len(body), 1500)
+        self.assertTrue(detect_user_supplied_spec(body))
+
+    def test_one_below_minimum_length_rejected(self) -> None:
+        # Body of EXACTLY 1499 chars with 2 headers — boundary on the False side.
+        headers = "## Summary\nFoo.\n\n## Acceptance criteria\nBar.\n"
+        body = headers + ("x" * (1499 - len(headers)))
+        self.assertEqual(len(body), 1499)
+        self.assertFalse(detect_user_supplied_spec(body))
 
 
 class TestBuildOutput(unittest.TestCase):

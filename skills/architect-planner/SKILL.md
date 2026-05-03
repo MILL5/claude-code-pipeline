@@ -62,6 +62,20 @@ The planner must understand what each model can and cannot do reliably to decomp
 - Architectural decisions that set constraints for downstream tasks
 - Problems requiring creative synthesis across multiple domains
 
+### Decision Table
+
+| Signal | Model | Why |
+|--------|-------|-----|
+| Clear, self-contained spec | **Haiku** | Cheapest, fast, reliable |
+| Coverage test for existing code, ≤3 mocks, no async, <25 cases | **Haiku** | Default for test-writing tasks |
+| Coverage test with >3 mocks, async behavior, or integration scope | **Sonnet** | Mock orchestration / cross-module reasoning |
+| Multi-file changes needing consistency | **Sonnet** | Cross-file coherence |
+| >3 interacting edge cases or >300 lines output | **Sonnet** | Haiku drops edge cases / drifts |
+| Design decisions constraining downstream tasks | **Sonnet** | Requires judgment |
+| Novel algorithms, concurrent shared state, security-critical | **Opus** | Requires creative/holistic reasoning |
+
+**Pricing:** Haiku $1/$5, Sonnet $3/$15, Opus $15/$75 per M tokens (in/out). A plan with 20 Haiku tasks ~ 4 Sonnet tasks ~ 1.3 Opus tasks.
+
 ## Planning Process
 
 ### Step 1: Verify Enriched Spec Coverage
@@ -298,10 +312,10 @@ The plan MUST be output as a structured document following this exact format:
 | *All-Sonnet comparison* | | | | *$X.XX* |
 | *All-Opus comparison*   | | | | *$X.XX* |
 
-**Risk uplift heuristic** — set realistic budget expectations vs. plan-vs-actual cost overruns. Apply the uplift row only when ≥1 trigger condition fires:
+**Risk uplift heuristic** — apply the uplift row only when ≥1 trigger fires:
 
-- **Folds:** +15% of the implementer subtotal per wave with ≥3 cross-file changes. Folds re-run the implementer at full Sonnet input when the reviewer flags `[should-fix]` items requiring code changes; empirically ~30% of cross-file waves trigger a fold cycle.
-- **Reviewer drift:** +15% of the reviewer cost per wave beyond Wave 1 when reviewer reuse spans waves. Cumulative SendMessage context grows ~50-100% per added review (production runs have observed 4.5× growth from Review 1 → Review 5).
+- **Folds:** +15% of the implementer subtotal per wave with ≥3 cross-file changes (~30% of cross-file waves trigger a fold cycle).
+- **Reviewer drift:** +15% of the reviewer cost per wave beyond Wave 1 when reviewer reuse spans waves (cumulative SendMessage context grows ~50-100% per added review; observed up to 4.5× from Review 1 → Review 5).
 
 ## Stack Distribution
 | Stack | Task Count | Files |
@@ -474,22 +488,6 @@ Sometimes the planner can't fully specify a task because it depends on runtime d
 - Create a **probe task** (Haiku or Sonnet): "Call endpoint X, log the response structure, save to `probe-output.json`"
 - Make downstream tasks depend on the probe's output
 - Include a **fallback shape** in the downstream brief: "The response will likely look like `{field: type}`, but if the probe shows otherwise, adapt accordingly" — and assign that task to Sonnet since it now requires judgment
-
-## Model Selection Quick Reference
-
-| Signal | Model | Why |
-|--------|-------|-----|
-| Clear, self-contained spec | **Haiku** | Cheapest, fast, reliable |
-| Coverage test for existing code, ≤3 mocks, no async, <25 cases | **Haiku** | Default for test-writing tasks |
-| Coverage test with >3 mocks, async behavior, or integration scope | **Sonnet** | Mock orchestration / cross-module reasoning |
-| Multi-file changes needing consistency | **Sonnet** | Cross-file coherence |
-| >3 interacting edge cases or >300 lines output | **Sonnet** | Haiku drops edge cases / drifts |
-| Design decisions constraining downstream tasks | **Sonnet** | Requires judgment |
-| Novel algorithms, concurrent shared state, security-critical | **Opus** | Requires creative/holistic reasoning |
-
-**Haiku limits:** Keep output <150 lines. Make ALL conventions explicit. If >3 edge cases, split or escalate.
-
-**Pricing:** Haiku $1/$5, Sonnet $3/$15, Opus $15/$75 per M tokens (in/out). A plan with 20 Haiku tasks ~ 4 Sonnet tasks ~ 1.3 Opus tasks.
 
 ## Output Budget
 

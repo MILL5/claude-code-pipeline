@@ -166,6 +166,35 @@ missing dependency injection, untestable architecture, tight coupling between la
 suggestions for future improvements, naming bikeshedding, SOLID "purity" concerns
 that don't create concrete risk (e.g., a small script that doesn't need DIP).
 
+### Broken-Head Pass-Through
+
+If the orchestrator's prompt includes a `BROKEN HEAD ANNOTATION:` block, the wave
+under review intentionally leaves the codebase in a broken intermediate state — a
+sequential split where the consumer-side update lives in a later wave (see the
+planner skill's "Broken-Head Split Detection" section). When the annotation is
+present:
+
+- **Pass-through findings that match the documented breakage** (callers using the
+  old signature, undefined consumers of a renamed symbol, missing imports for a
+  moved file — the annotation's `Reason:` field names the shape). Emit these as
+  `PASS` with a `--- BROKEN-HEAD NOTES ---` divider and one line per finding:
+
+  ```
+  PASS
+
+  --- BROKEN-HEAD NOTES ---
+  - <file>:<line> — <description; will be repaired in Wave N>
+  ```
+
+- **Apply normal `PASS`/`FAIL` logic to unrelated findings.** A real CRITICAL/HIGH
+  bug that has nothing to do with the broken head still produces `FAIL`. In that
+  case, list the broken-head findings under a `--- BROKEN-HEAD NOTES ---` divider
+  after the OPTIONAL IMPROVEMENTS section.
+
+- **No annotation, no pass-through.** Without a `BROKEN HEAD ANNOTATION:` block,
+  broken-integration symptoms are real bugs — `FAIL` per normal protocol. Never
+  invent a pass-through reason yourself.
+
 ### Protocol Guard
 
 The Pipeline Mode protocol above is the ONLY supported output format. **If your first line

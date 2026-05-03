@@ -643,6 +643,15 @@ the fix (Step 2.2 completion) uses Sonnet unconditionally.
 **Token tracking note:** When Haiku is selected, record `model: haiku` in the
 TOKEN_LEDGER entry for this review (step `2.1:<task_id>`).
 
+**Wave-level broken-head annotation** — before composing the reviewer prompt, scan the
+current wave's header in `.claude/tmp/1b-plan.md` for an italic metadata line in the form
+`*Broken head expected: <reason> — repaired by Wave <N>.*`. The planner emits this when
+a sequential split intentionally leaves a broken intermediate state (see
+`architect-planner/SKILL.md` "Broken-Head Split Detection"). If present, capture
+`<reason>` and `<N>` for injection into the reviewer prompt below; otherwise omit the
+`BROKEN HEAD ANNOTATION:` block entirely. The annotation lives only on the first review
+of the wave — subsequent SendMessage reviews already have it in context.
+
 **First review in a wave** — determine which stacks appear in the wave's tasks, then
 launch a new code-reviewer agent with those stacks' reviewer overlays:
 
@@ -662,6 +671,18 @@ Prompt: |
   <for each unique stack in this wave's tasks, paste its reviewer-overlay.md under "## <Stack> Review Rules" (apply only to matching files);
    append cross-cutting overlays under "## Cross-Cutting: <name> Review Rules";
    append local overlays for the reviewer role per Step 0.2 matrix (skip empty)>
+
+  [Inject ONLY if the wave is broken-head-annotated; otherwise omit this block entirely:]
+  BROKEN HEAD ANNOTATION:
+  This wave's commit intentionally leaves the codebase in a broken intermediate state.
+  Reason: <reason captured above>
+  Repaired by: Wave <N>
+
+  Distinguish findings that match the documented breakage (e.g., callers passing the old
+  signature, undefined consumers of a renamed symbol, missing imports for a moved file)
+  from unrelated findings. Emit matching findings as `PASS` with a `--- BROKEN-HEAD NOTES ---`
+  divider and a one-line note per finding — do NOT `FAIL` the review for them. Apply
+  normal `PASS`/`FAIL` logic to unrelated findings.
 
   REVIEW THESE CHANGES:
 

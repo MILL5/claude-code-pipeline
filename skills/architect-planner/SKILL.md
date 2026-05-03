@@ -426,6 +426,32 @@ to only what the implementer needs to produce code.
   put Task A in an earlier wave and inline its output signature into Task B's brief. Parallel
   tasks that each see only half of a shared contract produce runtime crashes that code review
   cannot catch. If the contract cannot be pre-determined, add a Wave 0 task to define it first.
+- [ ] **Broken-head split detection:** When a logical change must split across waves to fit
+  the 4-file cap AND the head wave's commit will leave the codebase in a broken intermediate
+  state (e.g., a function signature changes in Wave A while consumers in different files
+  update in Wave B), choose ONE of:
+  - **(a) Collapse with cap exemption** — combine the work into a single task even if it
+    touches 5-6 files. Document the exemption inline in the task brief:
+    `Note: 5-file exemption — avoiding broken-head split at wave boundary.`
+    Prefer this option when total file count ≤6 (still Haiku-executable).
+  - **(b) Annotate the head wave** — keep the split, and add a second italic metadata line
+    below the wave description in the format:
+
+    ```
+    ### Wave 4a: [Description]
+    *Tasks in this wave have no inter-dependencies and can execute in parallel.*
+    *Broken head expected: <one-line reason> — repaired by Wave <N>.*
+    ```
+
+    The orchestrator parses this annotation and instructs the reviewer to treat findings
+    matching the documented breakage as pass-through (`PASS` with `--- BROKEN-HEAD NOTES ---`,
+    not `FAIL`), avoiding a wasted fold cycle. Use this option when file count >6 (collapsing
+    would push the task into Sonnet/Opus tier).
+
+  Detection heuristic: a sequential split creates a broken head when one wave modifies a
+  public symbol (function signature, exported interface, type definition) and a later wave
+  updates consumers of that symbol in different files. Inspect each cross-wave file
+  dependency before finalizing the plan.
 
 ## Common Mistakes to Avoid
 

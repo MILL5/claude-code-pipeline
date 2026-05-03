@@ -1,75 +1,75 @@
 {
   "adapter": "python",
   "discovery_mode": "steps_dir",
-  "git_sha": "7d50454e6533151bf67d616ac2426a5a3d01b208",
+  "git_sha": "23457fa3ab45dbf2bc941a0d191fb77bb2e20218",
   "measurements": {
     "initial_load": {
-      "chars": 39012,
-      "est_tokens": 9753
+      "chars": 38641,
+      "est_tokens": 9660
     },
     "step_1.4": {
-      "cumulative_chars": 42310,
+      "cumulative_chars": 41939,
       "delta_chars": 3298,
-      "est_tokens": 10577
+      "est_tokens": 10484
     },
     "step_1.5": {
-      "cumulative_chars": 43248,
+      "cumulative_chars": 42877,
       "delta_chars": 938,
-      "est_tokens": 10812
+      "est_tokens": 10719
     },
     "step_1a": {
-      "cumulative_chars": 49081,
+      "cumulative_chars": 48710,
       "delta_chars": 5833,
-      "est_tokens": 12270
+      "est_tokens": 12177
     },
     "step_1b": {
-      "cumulative_chars": 53738,
+      "cumulative_chars": 53367,
       "delta_chars": 4657,
-      "est_tokens": 13434
+      "est_tokens": 13341
     },
     "step_2": {
-      "cumulative_chars": 57130,
+      "cumulative_chars": 56759,
       "delta_chars": 3392,
-      "est_tokens": 14282
+      "est_tokens": 14189
     },
     "step_2.1": {
-      "cumulative_chars": 63140,
+      "cumulative_chars": 62769,
       "delta_chars": 6010,
-      "est_tokens": 15785
+      "est_tokens": 15692
     },
     "step_2.2": {
-      "cumulative_chars": 64894,
+      "cumulative_chars": 64523,
       "delta_chars": 1754,
-      "est_tokens": 16223
+      "est_tokens": 16130
     },
     "step_3": {
-      "cumulative_chars": 66018,
+      "cumulative_chars": 65647,
       "delta_chars": 1124,
-      "est_tokens": 16504
+      "est_tokens": 16411
     },
     "step_3.4": {
-      "cumulative_chars": 69597,
+      "cumulative_chars": 69226,
       "delta_chars": 3579,
-      "est_tokens": 17399
+      "est_tokens": 17306
     },
     "step_3.5": {
-      "cumulative_chars": 77767,
+      "cumulative_chars": 77396,
       "delta_chars": 8170,
-      "est_tokens": 19441
+      "est_tokens": 19349
     },
     "step_4": {
-      "cumulative_chars": 79346,
+      "cumulative_chars": 78975,
       "delta_chars": 1579,
-      "est_tokens": 19836
+      "est_tokens": 19743
     },
     "step_5": {
-      "cumulative_chars": 81709,
+      "cumulative_chars": 81338,
       "delta_chars": 2363,
-      "est_tokens": 20427
+      "est_tokens": 20334
     },
     "total": {
-      "chars": 81709,
-      "est_tokens": 20427
+      "chars": 81338,
+      "est_tokens": 20334
     }
   },
   "schema_version": 1

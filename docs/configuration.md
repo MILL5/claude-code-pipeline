@@ -54,7 +54,7 @@ Empty files are skipped. Keep content concise — these are injected into every 
 Your project's instructions for Claude Code. The template provides a starting structure. Key sections to customize:
 - **Role**: Your developer persona ("senior React developer", "Python backend engineer")
 - **Context**: What your project does
-- **Workflow Rules**: Project-specific rules (the template includes sensible defaults)
+- **Workflow Rules**: Project-specific rules (template defers to agent definitions in `.claude/agents/` by default — add project-specific rules here if needed)
 - **Build & Test**: Already configured by init.sh to use pipeline skills
 
 ## `.claude/ORCHESTRATOR.md`

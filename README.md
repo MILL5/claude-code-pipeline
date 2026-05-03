@@ -175,6 +175,8 @@ Edit `.claude/local/coding-standards.md` with your rules. These get injected int
 **Q: How do I update the pipeline?**
 Run `/update-pipeline` from Claude Code. It pulls the latest version, shows what changed, validates structural integrity, and commits the submodule bump. If validation fails, it offers to roll back. See [docs/how-to.md](docs/how-to.md#updating-the-pipeline).
 
+Note: `/update-pipeline` regenerates pipeline-managed *symlinks* but does **not** modify your existing `.claude/CLAUDE.md`, `.claude/ORCHESTRATOR.md`, or `.claude/local/*` overlays. `init.sh` skips these files when they already exist (even with `--force`) to preserve consumer customization. To pick up template changes (e.g., the trimmed `Workflow Rules` section), either edit `.claude/CLAUDE.md` manually, or delete it and re-run `init.sh` to regenerate from the latest template.
+
 **Q: What if my project uses multiple stacks?**
 The pipeline supports multiple adapters simultaneously for multi-stack repos. Use `--stack=react --stack=python` with `init.sh`, or let auto-detection handle it. For Flutter apps with native platform code, use `--stack=flutter --stack=swift-ios --stack=android` — file-path routing sends Dart code to the Flutter overlay, Swift to swift-ios, and Kotlin to Android.
 

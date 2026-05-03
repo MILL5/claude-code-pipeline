@@ -339,9 +339,8 @@ the user whether to proceed without codebase context or update ORCHESTRATOR.md f
 1. Run `git status` — if the working tree is dirty, warn the user before proceeding.
 2. Run `git branch --show-current` — confirm you are on the expected branch.
 3. Check ORCHESTRATOR.md "Current State" — note the last known build/test status and date. If the last recorded status is older than the most recent commit, recommend the user run a build/test pass before planning.
-4. Check whether `.claude/tmp/1a-spec.md` already exists. If it does, ask the user: "A previous 1a analysis exists — resume from it or start fresh?"
 
-**1a passthrough detection (orchestrator, before launching the agent):**
+**1a passthrough detection (orchestrator, runs BEFORE the resume check below):**
 
 Check whether the user's `/orchestrate` request body is structurally a near-complete
 spec — i.e., the user supplied a detailed plan (e.g., an existing `OPTIMIZATION_PLAN.md`)
@@ -358,18 +357,27 @@ If detected, present:
 > work that 1a would have largely just verified). Reply `run 1a` to override.
 
 If the user replies `run 1a` (case-insensitive, leading/trailing whitespace ignored),
-discard the detection and proceed with Step 1a normally. Otherwise:
+discard the detection and fall through to the resume check below. Otherwise:
 
-1. Write the user's request body verbatim to `.claude/tmp/1a-spec.md`.
+1. Write the user's request body verbatim to `.claude/tmp/1a-spec.md` (overwriting any
+   prior file — the user's fresh spec is authoritative; the resume check is bypassed).
 2. Skip the architect-agent launch + clarification loop below.
 3. Record a passthrough entry in `TOKEN_LEDGER` (step=`1a:passthrough`,
-   agent=`orchestrator`, model=N/A, total_tokens=0, dur_ms=0) for ledger continuity.
+   agent=`orchestrator`, model=`—`, total_tokens=0, dur_ms=0) for ledger continuity.
 4. Proceed directly to Step 1b.
 
 Detection is intentionally conservative — false positives (skipping 1a when needed)
 are worse than false negatives (running 1a unnecessarily). The override path
 guarantees the user can always force normal 1a execution. Do NOT invent permissive
 header variants; follow the parser's exact header list.
+
+**Resume check (only if passthrough did not fire):**
+
+Check whether `.claude/tmp/1a-spec.md` already exists from a prior run. If it does,
+ask the user: "A previous 1a analysis exists — resume from it or start fresh?"
+
+- **Resume** → skip the agent launch and proceed directly to Step 1b with the existing spec.
+- **Start fresh** → delete `.claude/tmp/1a-spec.md` and run Step 1a normally below.
 
 **Launch the architect-agent in 1a mode:**
 

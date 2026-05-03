@@ -289,6 +289,20 @@ class TestUserSuppliedSpecDetection(unittest.TestCase):
         )
         self.assertFalse(detect_user_supplied_spec(body))
 
+    def test_exactly_minimum_length_accepted(self) -> None:
+        # Body of EXACTLY 1500 chars with 2 headers — boundary on the True side.
+        headers = "## Summary\nFoo.\n\n## Acceptance criteria\nBar.\n"
+        body = headers + ("x" * (1500 - len(headers)))
+        self.assertEqual(len(body), 1500)
+        self.assertTrue(detect_user_supplied_spec(body))
+
+    def test_one_below_minimum_length_rejected(self) -> None:
+        # Body of EXACTLY 1499 chars with 2 headers — boundary on the False side.
+        headers = "## Summary\nFoo.\n\n## Acceptance criteria\nBar.\n"
+        body = headers + ("x" * (1499 - len(headers)))
+        self.assertEqual(len(body), 1499)
+        self.assertFalse(detect_user_supplied_spec(body))
+
 
 class TestBuildOutput(unittest.TestCase):
     def test_success_output(self) -> None:

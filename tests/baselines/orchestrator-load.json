@@ -1,30 +1,30 @@
 {
   "adapter": "python",
   "discovery_mode": "steps_dir",
-  "git_sha": "7bff577cf4ee76de09089692257e0ce41d78df22",
+  "git_sha": "b532edaff7a916819cceffb5bdb515207038ad2e",
   "measurements": {
     "initial_load": {
       "chars": 56313,
       "est_tokens": 14078
     },
     "step_1a": {
-      "cumulative_chars": 62231,
-      "delta_chars": 5918,
-      "est_tokens": 15557
+      "cumulative_chars": 62146,
+      "delta_chars": 5833,
+      "est_tokens": 15536
     },
     "step_2.1": {
-      "cumulative_chars": 68241,
+      "cumulative_chars": 68156,
       "delta_chars": 6010,
-      "est_tokens": 17060
+      "est_tokens": 17039
     },
     "step_3.5": {
-      "cumulative_chars": 76508,
-      "delta_chars": 8267,
-      "est_tokens": 19127
+      "cumulative_chars": 76326,
+      "delta_chars": 8170,
+      "est_tokens": 19081
     },
     "total": {
-      "chars": 76508,
-      "est_tokens": 19127
+      "chars": 76326,
+      "est_tokens": 19081
     }
   },
   "schema_version": 1

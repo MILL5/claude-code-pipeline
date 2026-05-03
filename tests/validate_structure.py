@@ -987,10 +987,16 @@ def check_orchestrate_no_full_orchestrator_fallback(result: ValidationResult) ->
     The fixed-overhead finding identified ~6.5K tokens added per agent prompt when the
     extract logic fell back to loading the entire ORCHESTRATOR.md. The mitigation is
     partial-extract + missing-header note, never full file.
+
+    NOTE: Step 0.7 lives in SKILL.md (not extracted). This is a NEGATIVE check —
+    it asserts an antipattern phrase is NOT present. Scope to SKILL.md only;
+    using the orchestrate corpus would silently false-positive if a future step
+    file legitimately contained the phrase in unrelated context.
     """
-    content = read_orchestrate_corpus()
-    if not content:
+    skill_md = PIPELINE_ROOT / "skills" / "orchestrate" / "SKILL.md"
+    if not skill_md.exists():
         return
+    content = skill_md.read_text()
 
     if "paste the full file" in content.lower():
         result.fail(
@@ -1227,10 +1233,14 @@ def _parse_step_frontmatter(content: str) -> dict[str, str] | None:
     """Parse YAML-ish front-matter from a step file. Returns dict or None.
 
     Supports the limited subset used by step files:
-        step: "1a"           (string, may be quoted)
+        step: "1a"           (string, surrounding quotes stripped)
         requires: []          (bracket list, comma-separated paths)
         produces: [a, b]
         sendmessage: required (bare token)
+
+    Surrounding double or single quotes are stripped from scalar values so
+    `fm["step"] == "1a"` regardless of quoting. Bracket-list values are
+    returned verbatim (with brackets) — _parse_artifact_list handles them.
     """
     fm_re = re.compile(r"^---\n(.*?)\n---", re.DOTALL)
     match = fm_re.match(content)
@@ -1245,7 +1255,14 @@ def _parse_step_frontmatter(content: str) -> dict[str, str] | None:
         if ":" not in line:
             continue
         key, _, val = line.partition(":")
-        out[key.strip()] = val.strip()
+        val = val.strip()
+        # Strip surrounding quotes from scalar values; leave bracket lists alone.
+        if not val.startswith("["):
+            if (val.startswith('"') and val.endswith('"')) or (
+                val.startswith("'") and val.endswith("'")
+            ):
+                val = val[1:-1]
+        out[key.strip()] = val
     return out
 
 

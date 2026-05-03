@@ -114,4 +114,4 @@ verify that `TOKEN_LEDGER` contains at least one entry. If the ledger is empty, 
 
 Do NOT abort the pipeline. Continue with implementation but note the tracking gap.
 
-**Recovery:** If the pipeline is interrupted after 1a and `.claude/tmp/1a-spec.md` exists, skip 1a entirely and go directly to 1b. If `.claude/tmp/1b-plan.md` also exists, skip both 1a and 1b — present the saved plan to the user for confirmation and proceed to Step 1.5.
+**Recovery:** Resume behavior on interrupted runs is governed by the Resume dispatch matrix in `SKILL.md` — that matrix is authoritative. Do not duplicate or redefine resume rules here.

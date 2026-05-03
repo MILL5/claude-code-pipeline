@@ -1276,6 +1276,55 @@ def _parse_artifact_list(raw: str) -> list[str]:
     return [item.strip().strip('"').strip("'") for item in raw.split(",") if item.strip()]
 
 
+_TMP_ARTIFACT_RE = re.compile(r"\.claude/tmp/[\w.-]+\.\w+")
+
+
+def _check_step_file_content(label: str, content: str) -> list[str]:
+    """Validate a single step file's content. Returns a list of failure messages
+    (empty if the file is well-formed).
+
+    Pure helper used by `check_orchestrate_step_files` and unit-tested directly
+    via tests/test_contracts.py.
+    """
+    failures: list[str] = []
+    fm = _parse_step_frontmatter(content)
+    if fm is None:
+        failures.append(f"{label}: missing or malformed YAML front-matter")
+        return failures
+
+    for key in REQUIRED_STEP_FRONTMATTER_KEYS:
+        if key not in fm:
+            failures.append(f"{label}: front-matter missing required key '{key}'")
+
+    sendmessage = fm.get("sendmessage", "")
+    if sendmessage and sendmessage not in VALID_SENDMESSAGE:
+        failures.append(
+            f"{label}: sendmessage='{sendmessage}' is not one of "
+            f"{sorted(VALID_SENDMESSAGE)}"
+        )
+
+    body_after_fm = re.sub(r"^---\n.*?\n---\n?", "", content, count=1, flags=re.DOTALL)
+
+    declared: set[str] = set()
+    for kind in ("requires", "produces"):
+        for artifact in _parse_artifact_list(fm.get(kind, "[]")):
+            declared.add(artifact)
+            if artifact not in body_after_fm:
+                failures.append(
+                    f"{label}: {kind} declares '{artifact}' but it does not "
+                    f"appear in the step body (drift)"
+                )
+
+    body_refs = set(_TMP_ARTIFACT_RE.findall(body_after_fm))
+    for ref in sorted(body_refs - declared):
+        failures.append(
+            f"{label}: body references '{ref}' but it is not declared in "
+            f"requires/produces (one-directional contract gap)"
+        )
+
+    return failures
+
+
 def check_orchestrate_step_files(result: ValidationResult) -> None:
     """Step files in skills/orchestrate/steps/ must have valid front-matter.
 
@@ -1285,8 +1334,14 @@ def check_orchestrate_step_files(result: ValidationResult) -> None:
         produces: [<artifacts>]
         sendmessage: required | optional | n/a
 
-    Each artifact declared in requires/produces must appear as a substring in
-    the step body (catches drift between front-matter and prose).
+    Bidirectional artifact contract (issue #82):
+        - Declared → body: each artifact in requires/produces must appear as a
+          substring in the step body (catches stale front-matter).
+        - Body → declared: each `.claude/tmp/<file>.<ext>` reference in the
+          step body must be declared in requires or produces (catches
+          undeclared usage). The matching regex `\\.claude/tmp/[\\w.-]+\\.\\w+`
+          requires an extension, so directory-only prose like
+          "files in .claude/tmp/" does not trigger the check.
 
     No-op if steps/ does not exist (pre-Lever-1 state).
     """
@@ -1301,34 +1356,12 @@ def check_orchestrate_step_files(result: ValidationResult) -> None:
 
     for step_file in step_files:
         rel = step_file.relative_to(PIPELINE_ROOT)
-        content = step_file.read_text()
-        fm = _parse_step_frontmatter(content)
-        if fm is None:
-            result.fail(f"{rel}: missing or malformed YAML front-matter")
-            continue
-
-        for key in REQUIRED_STEP_FRONTMATTER_KEYS:
-            if key not in fm:
-                result.fail(f"{rel}: front-matter missing required key '{key}'")
-
-        sendmessage = fm.get("sendmessage", "")
-        if sendmessage and sendmessage not in VALID_SENDMESSAGE:
-            result.fail(
-                f"{rel}: sendmessage='{sendmessage}' is not one of "
-                f"{sorted(VALID_SENDMESSAGE)}"
-            )
-
-        body_after_fm = re.sub(r"^---\n.*?\n---\n?", "", content, count=1, flags=re.DOTALL)
-
-        for kind in ("requires", "produces"):
-            for artifact in _parse_artifact_list(fm.get(kind, "[]")):
-                if artifact not in body_after_fm:
-                    result.fail(
-                        f"{rel}: {kind} declares '{artifact}' but it does not "
-                        f"appear in the step body (drift)"
-                    )
-
-        result.ok(f"{rel}: front-matter valid")
+        failures = _check_step_file_content(str(rel), step_file.read_text())
+        if failures:
+            for f in failures:
+                result.fail(f)
+        else:
+            result.ok(f"{rel}: front-matter valid")
 
 
 REQUIRED_ADAPTER_MANIFEST_FIELDS = ["name", "display_name", "capabilities", "detection", "stack_paths"]

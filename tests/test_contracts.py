@@ -975,5 +975,140 @@ class TestReactAdapterParsers(unittest.TestCase):
             _os.remove(bad_path)
 
 
+class TestStepFileBidirectionalContract(unittest.TestCase):
+    """Issue #82: step file front-matter must be bidirectional with body refs."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        from validate_structure import _check_step_file_content
+        cls._check = staticmethod(_check_step_file_content)
+
+    def test_undeclared_body_reference_fails(self) -> None:
+        content = (
+            "---\n"
+            "step: \"test\"\n"
+            "requires: []\n"
+            "produces: []\n"
+            "sendmessage: n/a\n"
+            "---\n"
+            "\n"
+            "Body references `.claude/tmp/run-log.yml` without declaring it.\n"
+        )
+        failures = self._check("steps/test.md", content)
+        self.assertTrue(
+            any(
+                "body references '.claude/tmp/run-log.yml'" in f
+                and "one-directional contract gap" in f
+                for f in failures
+            ),
+            f"expected bidirectional failure, got: {failures}",
+        )
+
+    def test_declared_body_reference_passes(self) -> None:
+        content = (
+            "---\n"
+            "step: \"test\"\n"
+            "requires: [.claude/tmp/1b-plan.md]\n"
+            "produces: []\n"
+            "sendmessage: n/a\n"
+            "---\n"
+            "\n"
+            "Body references `.claude/tmp/1b-plan.md` and declares it.\n"
+        )
+        self.assertEqual(self._check("steps/test.md", content), [])
+
+    def test_directory_only_reference_does_not_trigger(self) -> None:
+        content = (
+            "---\n"
+            "step: \"test\"\n"
+            "requires: []\n"
+            "produces: []\n"
+            "sendmessage: n/a\n"
+            "---\n"
+            "\n"
+            "See files in `.claude/tmp/` directory.\n"
+        )
+        self.assertEqual(self._check("steps/test.md", content), [])
+
+    def test_declared_artifact_missing_from_body_still_fails(self) -> None:
+        content = (
+            "---\n"
+            "step: \"test\"\n"
+            "requires: [.claude/tmp/1a-spec.md]\n"
+            "produces: []\n"
+            "sendmessage: n/a\n"
+            "---\n"
+            "\n"
+            "Body has no artifact references.\n"
+        )
+        failures = self._check("steps/test.md", content)
+        self.assertTrue(
+            any(
+                "requires declares '.claude/tmp/1a-spec.md'" in f and "drift" in f
+                for f in failures
+            ),
+            f"expected drift failure, got: {failures}",
+        )
+
+    def test_produces_satisfies_body_reference(self) -> None:
+        content = (
+            "---\n"
+            "step: \"test\"\n"
+            "requires: []\n"
+            "produces: [.claude/tmp/1a-spec.md]\n"
+            "sendmessage: n/a\n"
+            "---\n"
+            "\n"
+            "This step writes `.claude/tmp/1a-spec.md`.\n"
+        )
+        self.assertEqual(self._check("steps/test.md", content), [])
+
+    def test_multiple_undeclared_refs_each_fail_in_sorted_order(self) -> None:
+        content = (
+            "---\n"
+            "step: \"test\"\n"
+            "requires: []\n"
+            "produces: []\n"
+            "sendmessage: n/a\n"
+            "---\n"
+            "\n"
+            "Refs `.claude/tmp/zeta.md` and `.claude/tmp/alpha.md` undeclared.\n"
+        )
+        failures = self._check("steps/test.md", content)
+        gap_failures = [f for f in failures if "one-directional contract gap" in f]
+        self.assertEqual(len(gap_failures), 2, f"expected 2 gap failures, got: {failures}")
+        # sorted() in source means alpha appears before zeta
+        self.assertIn(".claude/tmp/alpha.md", gap_failures[0])
+        self.assertIn(".claude/tmp/zeta.md", gap_failures[1])
+
+    def test_drift_and_gap_fire_independently(self) -> None:
+        content = (
+            "---\n"
+            "step: \"test\"\n"
+            "requires: [.claude/tmp/foo.md]\n"
+            "produces: []\n"
+            "sendmessage: n/a\n"
+            "---\n"
+            "\n"
+            "Body refs `.claude/tmp/bar.md` instead.\n"
+        )
+        failures = self._check("steps/test.md", content)
+        self.assertTrue(
+            any(
+                "requires declares '.claude/tmp/foo.md'" in f and "drift" in f
+                for f in failures
+            ),
+            f"expected drift failure for foo.md, got: {failures}",
+        )
+        self.assertTrue(
+            any(
+                "body references '.claude/tmp/bar.md'" in f
+                and "one-directional contract gap" in f
+                for f in failures
+            ),
+            f"expected gap failure for bar.md, got: {failures}",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

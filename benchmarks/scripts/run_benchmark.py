@@ -106,6 +106,7 @@ def invoke_pipeline_auto(
     log_path: Path,
     max_turns: int = _AUTO_MAX_TURNS,
     timeout_seconds: int = 60 * 60,
+    orchestrator_model: str = "sonnet",
 ) -> int:
     """Run claude -p headlessly. Returns wall seconds.
 
@@ -116,7 +117,18 @@ def invoke_pipeline_auto(
       - --output-format stream-json (capture full transcript incl. tool calls)
       - --max-turns (safety ceiling)
       - --verbose (stream-json requires verbose)
+      - --model (the orchestrator model — see note below)
       - CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 (SendMessage between waves)
+
+    Note on `orchestrator_model`: this is the model the top-level claude session
+    runs in. The orchestrator does coordination (read files, dispatch agents,
+    parse outputs) — Sonnet is plenty. Subagents (architect, implementer,
+    reviewer) request their own models per the orchestrate skill's model
+    selection logic; those overrides are unaffected by this flag.
+
+    Calibration #2 measured the impact: orchestrator on Opus 4.7 → ~$10/run;
+    on Sonnet 4.6 → ~$2/run. Default is sonnet for this reason. Override via
+    --orchestrator-model on run_benchmark.py if you want to A/B specifically.
     """
     cli = shutil.which("claude")
     if cli is None:
@@ -125,6 +137,7 @@ def invoke_pipeline_auto(
     prompt = f"/orchestrate\n\n{feature_request}"
     cmd = [
         cli, "-p", prompt,
+        "--model", orchestrator_model,
         "--permission-mode", "acceptEdits",
         "--allowedTools", _AUTO_ALLOWED_TOOLS,
         "--output-format", "stream-json",
@@ -265,6 +278,17 @@ def main() -> int:
                    help="Don't delete the work dir at the end")
     p.add_argument("--log-path", default=None,
                    help="Path to capture (auto) or read (manual) the pipeline log")
+    p.add_argument("--orchestrator-model", default="sonnet",
+                   choices=["sonnet", "opus", "haiku"],
+                   help="(--mode=auto) Model for the top-level claude session. "
+                        "Default sonnet — orchestrator does coordination, not deep reasoning. "
+                        "Opus is ~5x the cost with no measurable quality gain on routine "
+                        "benchmarks; override only if you specifically want to A/B orchestrator "
+                        "models (see issue #92).")
+    p.add_argument("--max-turns", type=int, default=None,
+                   help="(--mode=auto) Override --max-turns ceiling (default 120)")
+    p.add_argument("--timeout-seconds", type=int, default=3600,
+                   help="(--mode=auto) Wall-time timeout for the claude run (default 3600s = 1h)")
     args = p.parse_args()
 
     benchmark_dir = BENCHMARKS_DIR / args.benchmark
@@ -298,8 +322,14 @@ def main() -> int:
 
         # 2. Run pipeline
         if args.mode == "auto":
+            auto_kwargs: dict = {"orchestrator_model": args.orchestrator_model}
+            if args.max_turns is not None:
+                auto_kwargs["max_turns"] = args.max_turns
+            if args.timeout_seconds is not None:
+                auto_kwargs["timeout_seconds"] = args.timeout_seconds
             wall_seconds = invoke_pipeline_auto(
-                project_dir, (benchmark_dir / "feature-request.md").read_text(), log_path
+                project_dir, (benchmark_dir / "feature-request.md").read_text(), log_path,
+                **auto_kwargs,
             )
         else:  # manual
             wall_seconds = invoke_pipeline_manual(project_dir, log_path)

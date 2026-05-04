@@ -52,8 +52,25 @@ non-interactive operation per the [Claude Code headless docs](https://code.claud
   token counts (vs. text-only manual logs which fall back to regex)
 - `--max-turns 120` is a safety ceiling for runaway loops; legitimate Tier 1 runs are
   ~30-50 turns
+- `--model sonnet` for the orchestrator (top-level `claude` session). The orchestrator
+  does coordination, not deep reasoning — Sonnet is plenty. Subagents (architect,
+  implementer, reviewer) request their own models per the orchestrate skill's logic;
+  this flag does not affect them.
 
-Override via `--max-turns` or `--timeout-seconds` on `run_benchmark.py` if needed.
+Override via `--max-turns`, `--timeout-seconds`, or `--orchestrator-model` on
+`run_benchmark.py` if needed.
+
+#### Why Sonnet for the orchestrator
+
+Calibration #2 measured the impact: orchestrator on Opus 4.7 cost **~$11.96/run** for
+Tier 1 base64; on Sonnet 4.6 the same run is **~$3.70**. The 3× delta is almost
+entirely the orchestrator session — subagent costs (architect/implementer/reviewer)
+are unchanged because their model assignments are made per-spawn and unaffected by
+the top-level `--model` flag.
+
+If you want to A/B Opus vs. Sonnet *as an orchestrator* specifically (a legitimate
+question), pass `--orchestrator-model opus`. That's a model-config sweep (see #92),
+not the default validation path.
 
 ### Quick start (manual mode — recommended for first run)
 

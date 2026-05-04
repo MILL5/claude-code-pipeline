@@ -1,0 +1,36 @@
+{
+  "_note": "N=5 noise floor mean \u2014 pipeline sha daf5555 \u2014 2026-05-04",
+  "benchmark": "tier1-base64",
+  "pipeline_sha": "daf5555",
+  "n_runs": 5,
+  "wall_time_seconds": 1615,
+  "tokens": {
+    "total_input": 1891,
+    "total_output": 3742,
+    "total_cache_read": 17328091,
+    "total_cache_creation": 767120
+  },
+  "score": {
+    "correctness": 1.0,
+    "efficiency": 1.0,
+    "composite": 1.0
+  },
+  "noise_floor": {
+    "correctness": {
+      "mean": 1.0,
+      "std": 0.0
+    },
+    "wall_seconds": {
+      "mean": 1615.2,
+      "std": 310.40409146788
+    },
+    "cache_read_tokens": {
+      "mean": 17328090.8,
+      "std": 3207297.4595422545
+    },
+    "cost_usd_per_run": {
+      "mean": 8.14,
+      "std": 1.41
+    }
+  }
+}

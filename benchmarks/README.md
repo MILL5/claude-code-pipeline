@@ -18,6 +18,37 @@ base64 encode/decode. The oracle is a round-trip property suite:
 `decode(encode(x)) == x` for 1000 random inputs, plus reference equivalence
 against Python's stdlib `base64`.
 
+## Running Tier 2
+
+The Tier 2 benchmark (`tier2-lru-cache`) asks the pipeline to implement a
+fixed-capacity LRU cache (`LRUCache` class with O(1) `get`/`put`). The oracle
+generates 1000 randomized op sequences and compares the candidate's state
+against an `OrderedDict`-backed reference after every op (parity check on
+`len`, `__contains__`, and `get`/KeyError outcomes), plus capacity-invariant
+runs, round-trip checks, and four hand-crafted eviction-order scenarios.
+
+Why Tier 2 exists: Tier 1's N=5 noise floor produced correctness=1.000 ± 0.000
+(see issue #93), confirming Tier 1 is a reliable smoke test but blind to model
+quality differences. Tier 2 targets the "medium hard" zone — the spec forbids
+`OrderedDict` and `functools.lru_cache`, forcing a from-scratch hash-map +
+doubly-linked-list implementation where eviction-order bugs (evicting MRU
+instead of LRU; failing to refresh recency on `get` or re-`put`) are common.
+
+```bash
+# single run, manual mode
+python3 benchmarks/scripts/run_benchmark.py tier2-lru-cache --mode=manual
+
+# N=5 noise floor with the proven config (Sonnet orchestrator)
+python3 benchmarks/scripts/noise_floor.py tier2-lru-cache --n=5
+```
+
+If Tier 2 also shows ceiling effect (correctness always = 1.000), the next
+"knob to turn" is to enforce the no-stdlib-LRU rule statically — add an
+import-source check to `unit_tests.py` so models that take the `OrderedDict`
+shortcut are penalized. See issue #97 for the full validation protocol and
+escalation candidates (B: arithmetic expression evaluator, C: run-length
+encoding).
+
 ### Modes
 
 The harness supports three modes for invoking the pipeline:

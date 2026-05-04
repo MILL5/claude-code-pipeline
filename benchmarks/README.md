@@ -28,6 +28,33 @@ The harness supports three modes for invoking the pipeline:
 | `auto`     | Headless run — `claude -p` invokes the pipeline non-interactively | API tokens (~$1-5/run) |
 | `existing` | You already have a project dir with a candidate implementation; just score it | Free |
 
+#### How `--mode=auto` is wired up
+
+The harness invokes:
+
+```bash
+claude -p "/orchestrate <feature-request>" \
+    --permission-mode acceptEdits \
+    --allowedTools "Agent,SendMessage,Read,Edit,Write,Bash,Glob,Grep,TaskCreate,..." \
+    --output-format stream-json \
+    --verbose \
+    --max-turns 120
+```
+
+with `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` in the env. These flags are required for
+non-interactive operation per the [Claude Code headless docs](https://code.claude.com/docs/en/headless):
+
+- `acceptEdits` skips edit/write permission prompts
+- `--allowedTools` pre-approves Agent (subagent spawn) and SendMessage (agent reuse) so
+  the pipeline can run multi-wave without prompting
+- `stream-json` produces a newline-delimited JSON transcript including tool calls and
+  per-message token usage. `capture_metrics.py` parses this to produce trustworthy
+  token counts (vs. text-only manual logs which fall back to regex)
+- `--max-turns 120` is a safety ceiling for runaway loops; legitimate Tier 1 runs are
+  ~30-50 turns
+
+Override via `--max-turns` or `--timeout-seconds` on `run_benchmark.py` if needed.
+
 ### Quick start (manual mode — recommended for first run)
 
 ```bash
@@ -100,10 +127,14 @@ Exits 1 if correctness drops by more than `REGRESSION_THRESHOLD` (currently 0.05
 }
 ```
 
-Token capture is best-effort: it parses `---TOKEN_REPORT---` blocks from the
-session log. In `--mode=manual`, save the session transcript to
-`benchmarks/runs/<id>/pipeline.log` to populate token metrics; otherwise they
-default to zero and only correctness is meaningful.
+Token capture has two paths:
+
+- **`--mode=auto`** uses `--output-format stream-json`, so `capture_metrics.py` reads
+  precise per-message `usage.input_tokens` / `output_tokens` / `cache_read_input_tokens`,
+  attributed by model. These are reliable.
+- **`--mode=manual`** falls back to regex parsing of `---TOKEN_REPORT---` blocks in the
+  log. Save the session transcript to `benchmarks/runs/<id>/pipeline.log` to populate
+  metrics; otherwise tokens default to zero and only correctness is meaningful.
 
 ## Statistical handling (planned, not yet implemented)
 

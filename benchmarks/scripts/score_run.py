@@ -61,6 +61,13 @@ def _load_baseline(benchmark: str) -> dict[str, Any] | None:
         return None
 
 
+def _input_tokens(metrics: dict[str, Any]) -> int:
+    """Total input tokens regardless of log format. Stream-json uses `total_input`,
+    text fallback uses `total_input_estimate`."""
+    tokens = metrics.get("tokens", {})
+    return int(tokens.get("total_input") or tokens.get("total_input_estimate") or 0)
+
+
 def _efficiency(metrics: dict[str, Any]) -> float:
     """1.0 = matches baseline. >1.0 = better (cheaper/faster). <1.0 = regressed."""
     baseline = _load_baseline(metrics.get("benchmark", ""))
@@ -68,10 +75,10 @@ def _efficiency(metrics: dict[str, Any]) -> float:
         return 1.0  # no baseline yet; don't penalize
 
     base_wall = baseline.get("wall_time_seconds", 0) or 1
-    base_tokens = baseline.get("tokens", {}).get("total_input_estimate", 0) or 1
+    base_tokens = _input_tokens(baseline) or 1
 
     wall = metrics.get("wall_time_seconds", 0) or 1
-    tokens = metrics.get("tokens", {}).get("total_input_estimate", 0) or 1
+    tokens = _input_tokens(metrics) or 1
 
     wall_ratio = base_wall / wall if wall else 1.0
     token_ratio = base_tokens / tokens if tokens else 1.0

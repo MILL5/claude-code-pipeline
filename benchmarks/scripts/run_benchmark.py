@@ -86,23 +86,71 @@ def setup_skeleton(benchmark: str, work_root: Path) -> Path:
     return project_dir
 
 
-def invoke_pipeline_auto(project_dir: Path, feature_request: str, log_path: Path) -> int:
-    """Run claude -p headlessly. Returns wall seconds."""
+# Tools the orchestrator and its subagents need access to during a headless run.
+# Bash is unrestricted because the pipeline shells out to git, gh, init.sh, build/test runners,
+# and adapter scripts under .claude/scripts/<stack>/. Restricting it would block real work.
+_AUTO_ALLOWED_TOOLS = ",".join([
+    "Agent", "SendMessage", "Read", "Edit", "Write", "Bash",
+    "Glob", "Grep",
+    "TaskCreate", "TaskUpdate", "TaskList", "TaskGet", "TaskStop", "TaskOutput",
+])
+
+# Cap on conversation turns. ~5 waves × 4 tasks × ~3 turns each + planning/review = ~80 turns.
+# A higher ceiling guards against runaway loops without killing legitimate long runs.
+_AUTO_MAX_TURNS = 120
+
+
+def invoke_pipeline_auto(
+    project_dir: Path,
+    feature_request: str,
+    log_path: Path,
+    max_turns: int = _AUTO_MAX_TURNS,
+    timeout_seconds: int = 60 * 60,
+) -> int:
+    """Run claude -p headlessly. Returns wall seconds.
+
+    Configuration follows the headless-mode requirements documented at
+    https://code.claude.com/docs/en/headless:
+      - --permission-mode acceptEdits (no interactive prompts)
+      - --allowedTools (pre-approve Agent, SendMessage, Bash, etc.)
+      - --output-format stream-json (capture full transcript incl. tool calls)
+      - --max-turns (safety ceiling)
+      - --verbose (stream-json requires verbose)
+      - CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 (SendMessage between waves)
+    """
     cli = shutil.which("claude")
     if cli is None:
-        raise RuntimeError("`claude` CLI not on PATH; use --mode=manual or set --cli-cmd")
+        raise RuntimeError("`claude` CLI not on PATH; use --mode=manual instead")
+
     prompt = f"/orchestrate\n\n{feature_request}"
+    cmd = [
+        cli, "-p", prompt,
+        "--permission-mode", "acceptEdits",
+        "--allowedTools", _AUTO_ALLOWED_TOOLS,
+        "--output-format", "stream-json",
+        "--verbose",
+        "--max-turns", str(max_turns),
+    ]
+    env = {**os.environ, "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"}
+
     started = time.time()
-    with log_path.open("w") as logf:
-        proc = subprocess.run(
-            [cli, "-p", prompt],
-            cwd=project_dir,
-            stdout=logf, stderr=subprocess.STDOUT,
-            text=True,
-        )
+    try:
+        with log_path.open("w") as logf:
+            proc = subprocess.run(
+                cmd,
+                cwd=project_dir,
+                stdout=logf, stderr=subprocess.STDOUT,
+                text=True, env=env,
+                timeout=timeout_seconds,
+            )
+    except subprocess.TimeoutExpired:
+        print(f"WARNING: claude run exceeded {timeout_seconds}s timeout; metrics may be partial")
+        return int(time.time() - started)
+
     elapsed = int(time.time() - started)
     if proc.returncode != 0:
-        print(f"WARNING: claude exited {proc.returncode}; metrics may be partial")
+        print(f"WARNING: claude exited {proc.returncode}; metrics may be partial. "
+              f"See {log_path} for the stream-json transcript.")
     return elapsed
 
 

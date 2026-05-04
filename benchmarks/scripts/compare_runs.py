@@ -98,14 +98,22 @@ def main() -> int:
     print(f"  {_fmt_int(a.get('wall_time_seconds', 0), b.get('wall_time_seconds', 0))}")
 
     print()
-    print("Tokens (estimate):")
-    a_tok = a.get("tokens", {}).get("total_input_estimate", 0)
-    b_tok = b.get("tokens", {}).get("total_input_estimate", 0)
-    print(f"  input_estimate  {_fmt_int(a_tok, b_tok)}")
+    print("Tokens:")
+    a_tokens = a.get("tokens", {})
+    b_tokens = b.get("tokens", {})
+    a_tok = a_tokens.get("total_input") or a_tokens.get("total_input_estimate") or 0
+    b_tok = b_tokens.get("total_input") or b_tokens.get("total_input_estimate") or 0
+    print(f"  input           {_fmt_int(a_tok, b_tok)}")
+    a_cache = a_tokens.get("total_cache_read", 0)
+    b_cache = b_tokens.get("total_cache_read", 0)
+    if a_cache or b_cache:
+        print(f"  cache_read      {_fmt_int(a_cache, b_cache)}")
 
     print()
     print("Pipeline:")
-    for k in ("waves", "review_fail_rounds", "bug_fix_cycles"):
+    pipeline_keys = ("waves", "review_fail_rounds", "bug_fix_cycles",
+                     "turns", "tool_calls", "agent_spawns", "sendmessage_calls")
+    for k in pipeline_keys:
         av = a.get("pipeline", {}).get(k, 0)
         bv = b.get("pipeline", {}).get(k, 0)
         print(f"  {k:<22} {_fmt_int(av, bv)}")

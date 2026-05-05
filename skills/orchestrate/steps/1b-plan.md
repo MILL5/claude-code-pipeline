@@ -92,3 +92,18 @@ the plan.
 **Token tracking:** Per Step 0.6 — one entry for the initial launch (step `1b`); one per impl-clarification SendMessage (step `1b:impl-clarify-N`); one per revision (step `1b:revision-N`). agent=`architect-agent`, model=as selected above.
 
 **Plan revisions:** If the user requests changes, use **SendMessage** to the 1b agent (do NOT launch a new agent — the architect must remember its own plan). Iterate until confirmed.
+
+**Non-interactive mode (NON_INTERACTIVE=true):** Before launching the architect-agent, append the following block to the prompt (after `CODEBASE CONTEXT`):
+
+```
+NON_INTERACTIVE MODE: No user is available. Skip implementation clarification questions
+entirely. Proceed directly to decomposition and plan generation using the 1a-spec as
+authoritative. If a decision is irreducibly ambiguous, choose the most idiomatic approach
+and document it in the plan.
+```
+
+- Skip the implementation clarification loop — do NOT surface questions or wait for answers.
+- After receiving `PLAN_WRITTEN`, read and validate `.claude/tmp/1b-plan.md` (same quality checks as interactive mode).
+- Process any `## Deferred Items` per the Backlog Integration section.
+- Proceed directly to Step 1.4 — do NOT present the plan to the user or wait for confirmation.
+- Record step=`1b` in TOKEN_LEDGER with notes=`non-interactive: auto-confirmed`.

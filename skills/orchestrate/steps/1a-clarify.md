@@ -51,11 +51,11 @@ header variants; follow the parser's exact header list.
 
 **Resume check (only if passthrough did not fire):**
 
-Check whether `.claude/tmp/1a-spec.md` already exists from a prior run. If it does,
-ask the user: "A previous 1a analysis exists — resume from it or start fresh?"
-
-- **Resume** → skip the agent launch and proceed directly to Step 1b with the existing spec.
-- **Start fresh** → delete `.claude/tmp/1a-spec.md` and run Step 1a normally below.
+Check whether `.claude/tmp/1a-spec.md` already exists from a prior run. If it does:
+- **If `NON_INTERACTIVE=true`:** default to **Resume** without asking — a headless run cannot answer the prompt.
+- **Otherwise:** ask the user: "A previous 1a analysis exists — resume from it or start fresh?"
+  - **Resume** → skip the agent launch and proceed directly to Step 1b with the existing spec.
+  - **Start fresh** → delete `.claude/tmp/1a-spec.md` and run Step 1a normally below.
 
 **Launch the architect-agent in 1a mode:**
 

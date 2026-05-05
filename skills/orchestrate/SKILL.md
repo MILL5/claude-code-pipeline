@@ -229,16 +229,6 @@ When `NON_INTERACTIVE=true`, announce once before Step 1a:
 
 > ⚠ Non-interactive mode active (`CLAUDE_PIPELINE_NON_INTERACTIVE=1`). Scope ambiguities will be auto-defaulted; clarification and manual-test loops are skipped. Output protocol is unchanged.
 
-After initializing `TOKEN_LEDGER` in Step 0.6, append a sentinel entry:
-
-```
-step: "0.5:mode", agent: "orchestrator", model: "—", input_chars: 0, output_chars: 0,
-input_tokens: 0, output_tokens: 0, notes: "non-interactive mode"
-```
-
-This sentinel marks every run that used non-interactive mode so post-hoc token analysis can
-distinguish auto-defaulted decisions from user-confirmed ones.
-
 ## Step 0.6: Initialize Token Tracking
 
 Immediately after loading the adapter, initialize the `TOKEN_LEDGER` — an in-session list that
@@ -267,6 +257,15 @@ accumulates token usage data for every agent call throughout the pipeline. Also 
 `---TOKEN_REPORT---` block (compact 3-line format) for `files_read` and `tool_calls`. If the
 TOKEN_REPORT is missing or malformed, leave those fields empty — do not fail. Append the
 entry to `TOKEN_LEDGER`.
+
+**Non-interactive sentinel:** If `NON_INTERACTIVE=true`, append this entry immediately after initializing the empty ledger:
+
+```
+step: "0.5:mode", agent: "orchestrator", model: "—", input_chars: 0, output_chars: 0,
+input_tokens: 0, output_tokens: 0, notes: "non-interactive mode"
+```
+
+This marks every non-interactive run so post-hoc token analysis can distinguish auto-defaulted decisions from user-confirmed ones.
 
 ## Step 0.65: Initialize Backlog Integration State
 

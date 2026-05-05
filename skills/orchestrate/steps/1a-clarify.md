@@ -51,11 +51,11 @@ header variants; follow the parser's exact header list.
 
 **Resume check (only if passthrough did not fire):**
 
-Check whether `.claude/tmp/1a-spec.md` already exists from a prior run. If it does,
-ask the user: "A previous 1a analysis exists — resume from it or start fresh?"
-
-- **Resume** → skip the agent launch and proceed directly to Step 1b with the existing spec.
-- **Start fresh** → delete `.claude/tmp/1a-spec.md` and run Step 1a normally below.
+Check whether `.claude/tmp/1a-spec.md` already exists from a prior run. If it does:
+- **If `NON_INTERACTIVE=true`:** default to **Resume** without asking — a headless run cannot answer the prompt.
+- **Otherwise:** ask the user: "A previous 1a analysis exists — resume from it or start fresh?"
+  - **Resume** → skip the agent launch and proceed directly to Step 1b with the existing spec.
+  - **Start fresh** → delete `.claude/tmp/1a-spec.md` and run Step 1a normally below.
 
 **Launch the architect-agent in 1a mode:**
 
@@ -85,6 +85,18 @@ Prompt: |
   CODEBASE CONTEXT (ORCHESTRATOR.md 1a extract — do not re-read from disk):
   <paste 1a Extract from Step 0.7>
 ```
+
+**Non-interactive mode (NON_INTERACTIVE=true):** Before launching the architect-agent, append the following block to the prompt (after `CODEBASE CONTEXT`):
+
+```
+NON_INTERACTIVE MODE: No user is available to answer questions. If scope is ambiguous,
+choose the most idiomatic answer for this stack. Document every auto-defaulted decision
+in a "## Auto-defaulted Decisions" section of 1a-spec.md and include a [NON-INTERACTIVE]
+banner at the top of the file. Do NOT ask questions or halt — produce 1a-spec.md directly.
+```
+
+Then skip the clarification loop below. Record step=`1a` in TOKEN_LEDGER with
+notes=`non-interactive: auto-defaulted`. Proceed to the TOKEN_LEDGER gate.
 
 **Clarification loop:**
 - The 1a agent will output a structured analysis followed by grouped clarifying questions.

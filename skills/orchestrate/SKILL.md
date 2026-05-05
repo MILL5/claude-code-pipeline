@@ -215,6 +215,20 @@ subscription/tenant/user/auth method, caches result as `AZURE_AUTH_STATUS`).
   Azure-dependent skills check `AZURE_AUTH_STATUS` and skip re-validation if already OK.
   Re-validate if the target subscription or resource group changes mid-pipeline.
 
+## Step 0.5: Non-Interactive Mode Detection
+
+Check the `CLAUDE_PIPELINE_NON_INTERACTIVE` environment variable:
+
+```bash
+echo "${CLAUDE_PIPELINE_NON_INTERACTIVE:-0}"
+```
+
+If the result is `1`, set `NON_INTERACTIVE=true`. Otherwise `NON_INTERACTIVE=false`.
+
+When `NON_INTERACTIVE=true`, announce once before Step 1a:
+
+> ⚠ Non-interactive mode active (`CLAUDE_PIPELINE_NON_INTERACTIVE=1`). Scope ambiguities will be auto-defaulted; clarification and manual-test loops are skipped. Output protocol is unchanged.
+
 ## Step 0.6: Initialize Token Tracking
 
 Immediately after loading the adapter, initialize the `TOKEN_LEDGER` — an in-session list that
@@ -243,6 +257,15 @@ accumulates token usage data for every agent call throughout the pipeline. Also 
 `---TOKEN_REPORT---` block (compact 3-line format) for `files_read` and `tool_calls`. If the
 TOKEN_REPORT is missing or malformed, leave those fields empty — do not fail. Append the
 entry to `TOKEN_LEDGER`.
+
+**Non-interactive sentinel:** If `NON_INTERACTIVE=true`, append this entry immediately after initializing the empty ledger:
+
+```
+step: "0.5:mode", agent: "orchestrator", model: "—", input_chars: 0, output_chars: 0,
+input_tokens: 0, output_tokens: 0, notes: "non-interactive mode"
+```
+
+This marks every non-interactive run so post-hoc token analysis can distinguish auto-defaulted decisions from user-confirmed ones.
 
 ## Step 0.65: Initialize Backlog Integration State
 
@@ -585,7 +608,7 @@ PR). If no folds occurred, omit the section entirely.
 - **Does not review code.** That's the code-reviewer's job.
 - **Does not modify commit messages.** Uses them verbatim from the implementer.
 - **Does not merge PRs.** The user decides when to merge.
-- **Does not skip steps.** Every change goes through the full pipeline.
+- **Does not skip steps.** Every change goes through the full pipeline. (Exception: Step 3.5 is skipped when `NON_INTERACTIVE=true` — see Step 0.5.)
 
 ## Resuming After Interruption
 
